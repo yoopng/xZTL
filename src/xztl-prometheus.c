@@ -264,7 +264,7 @@ int xztl_prometheus_init(void) {
     STAILQ_INIT(&lat_head);
 
     if (pthread_spin_init(&lat_spin, 0))
-        return -1;
+        return XZTL_ZTL_PROMETHEUS_ERR;
 
     ret = xztl_mempool_create(XZTL_PROMETHEUS_LAT, 0, MAX_LATENCY_ENTS,
                               sizeof(struct latency_entry), NULL, NULL);
@@ -288,7 +288,7 @@ int xztl_prometheus_init(void) {
     while (!xztl_flush_running || !xztl_flush_l_running) {
     }
 
-    return 0;
+    return XZTL_OK;
 
 LAT_TH:
     while (!xztl_flush_l_running) {
@@ -299,5 +299,5 @@ MP:
     xztl_mempool_destroy(XZTL_PROMETHEUS_LAT, 0);
 SPIN:
     pthread_spin_destroy(&lat_spin);
-    return -1;
+    return XZTL_ZTL_PROMETHEUS_ERR;
 }

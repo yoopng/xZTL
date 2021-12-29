@@ -62,7 +62,7 @@ static uint32_t map_pg_sz;
 static uint64_t map_ent_per_pg;
 
 static int map_nvm_read(struct map_cache_entry *ent) {
-    return 0;
+    return XZTL_OK;
 }
 
 static int map_evict_pg_cache(struct map_cache *cache, uint8_t is_checkpoint) {
@@ -72,7 +72,7 @@ static int map_evict_pg_cache(struct map_cache *cache, uint8_t is_checkpoint) {
     cache_ent = TAILQ_FIRST(&cache->mbu_head);
     if (!cache_ent) {
         pthread_spin_unlock(&cache->mb_spin);
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
     }
 
     TAILQ_REMOVE(&cache->mbu_head, cache_ent, u_entry);
@@ -90,7 +90,7 @@ static int map_evict_pg_cache(struct map_cache *cache, uint8_t is_checkpoint) {
     cache->nfree++;
     pthread_spin_unlock(&cache->mb_spin);
 
-    return 0;
+    return XZTL_OK;
 }
 
 static int map_load_pg_cache(struct map_cache *  cache,
@@ -110,7 +110,7 @@ WAIT:
         pthread_mutex_lock(&cache->mutex);
         if (map_evict_pg_cache(cache, 0)) {
             pthread_mutex_unlock(&cache->mutex);
-            return -1;
+            return XZTL_ZTL_MAP_ERR;
         }
         pthread_mutex_unlock(&cache->mutex);
     }
@@ -119,7 +119,7 @@ WAIT:
     cache_ent = LIST_FIRST(&cache->mbf_head);
     if (!cache_ent) {
         pthread_spin_unlock(&cache->mb_spin);
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
     }
 
     LIST_REMOVE(cache_ent, f_entry);
@@ -145,7 +145,7 @@ WAIT:
             cache->nfree++;
             pthread_spin_unlock(&cache->mb_spin);
 
-            return -1;
+            return XZTL_ZTL_MAP_ERR;
         }
 
         /* Cache entry PPA is set after the read completes */
@@ -162,7 +162,7 @@ WAIT:
     ZDEBUG(ZDEBUG_MAP, "ztl-map: Page cache loaded. Offset 0x%lu",
            (uint64_t)cache_ent->addr.g.offset);
 
-    return 0;
+    return XZTL_OK;
 }
 
 static int map_init_cache(struct map_cache *cache) {
@@ -171,7 +171,7 @@ static int map_init_cache(struct map_cache *cache) {
     cache->pg_buf = calloc(MAP_BUF_PGS, sizeof(struct map_cache_entry));
     if (!cache->pg_buf) {
         log_err("Map cache initialization failed.\n");
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
     }
 
     if (pthread_spin_init(&cache->mb_spin, 0))
@@ -201,7 +201,7 @@ static int map_init_cache(struct map_cache *cache) {
         cache->nfree++;
     }
 
-    return 0;
+    return XZTL_OK;
 
 FREE_PGS:
     while (pg_i) {
@@ -215,7 +215,7 @@ SPIN:
     pthread_spin_destroy(&cache->mb_spin);
 FREE_BUF:
     free(cache->pg_buf);
-    return -1;
+    return XZTL_ZTL_MAP_ERR;
 }
 
 static void map_flush_cache(struct map_cache *cache, uint8_t full) {
@@ -265,7 +265,7 @@ static int map_init(void) {
     uint32_t cache_i;
     map_caches = calloc(MAP_N_CACHES, sizeof(struct map_cache));
     if (!map_caches)
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
 
     map_pg_sz      = (ZTL_MPE_PG_SEC * core->media->geo.nbytes);
     map_ent_per_pg = map_pg_sz / sizeof(struct app_map_entry);
@@ -281,12 +281,12 @@ static int map_init(void) {
 
     log_info("ztl-map: Global Mapping started.\n");
 
-    return 0;
+    return XZTL_OK;
 
 EXIT_CACHES:
     free(map_caches);
 
-    return -1;
+    return XZTL_ZTL_MAP_ERR;
 }
 
 static void map_exit(void) {
@@ -354,7 +354,7 @@ static struct map_cache_entry *map_get_cache_entry(uint64_t id) {
 }
 
 static int map_upsert_md(uint64_t index, uint64_t new_addr, uint64_t old_addr) {
-    return 0;
+    return XZTL_OK;
 }
 
 static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
@@ -367,14 +367,14 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
     if (ent_off >= map_ent_per_pg) {
         log_erra("ztl-map: upsert. Entry offset out of bounds. ID %lu, off %d",
                  id, ent_off);
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
     }
 
     ZDEBUG(ZDEBUG_MAP, "ztl-map: upsert. ID: %lu, off %d.", id, ent_off);
 
     cache_ent = map_get_cache_entry(id);
     if (!cache_ent)
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
 
     map_ent = &((struct app_map_entry *)cache_ent->buf)[ent_off]; // NOLINT
 
@@ -385,7 +385,7 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
        'old_caller' as 0. GC, for example, sets 'old_caller' with the old
        sector address. If other thread has updated it, keep the current value.*/
     if (old_caller && map_ent->addr != old_caller) {
-        return 1;
+        return XZTL_ZTL_MAP_ERR;
     }
 
     xztl_atomic_int64_update(&map_ent->addr, val);
@@ -393,7 +393,7 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
     ZDEBUG(ZDEBUG_MAP, "  upsert succeed: ID: %lu, val: (0x%lx/%d/%d)", id,
            (uint64_t)map_ent->g.offset, map_ent->g.nsec, map_ent->g.multi);
 
-    return 0;
+    return XZTL_OK;
 }
 
 static uint64_t map_read(uint64_t id) {

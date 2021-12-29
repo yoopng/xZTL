@@ -76,7 +76,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
 /* This function checks if the media offsets are sequential.
  * If not, we return a negative value. For now we do not support
  * multi-piece mapping in ZTL-managed mapping */
-static int ztl_wca_check_offset_seq(struct xztl_io_ucmd *ucmd) {
+/*static int ztl_wca_check_offset_seq(struct xztl_io_ucmd *ucmd) {
     uint32_t off_i;
 
     for (off_i = 1; off_i < ucmd->nmcmd; off_i++) {
@@ -87,7 +87,7 @@ static int ztl_wca_check_offset_seq(struct xztl_io_ucmd *ucmd) {
     }
 
     return XZTL_OK;
-}
+}*/
 
 /* This function prepares a multi-piece mapping to return to the user.
  * Each entry contains the offset and size, and the full list represents
@@ -205,12 +205,12 @@ static uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
         cnt = ztl_thd_allocNode_for_thd(tdinfo);
         if (cnt == 0) {
             log_err("No available node resource.\n");
-            return -1;
+            return XZTL_ZTL_WCA_ERR;
         } else {
             node = STAILQ_FIRST(&tdinfo->free_head);
             if (!node) {
                 log_err("Invalid node.\n");
-                return -1;
+                return XZTL_ZTL_WCA_ERR;
             }
         }
     }
@@ -657,7 +657,7 @@ static int _ztl_thd_init(struct xztl_thread *td) {
     td->prov = zrocks_alloc(sizeof(struct app_pro_addr));
     if (!td->prov) {
         log_err("Thread resource (data buffer) allocation error.");
-        return -1;
+        return XZTL_ZTL_WCA_ERR;
     }
 
     struct app_pro_addr *prov = (struct app_pro_addr *)td->prov;
@@ -666,12 +666,12 @@ static int _ztl_thd_init(struct xztl_thread *td) {
     td->tctx = xztl_ctx_media_init(XZTL_CTX_NVME_DEPTH);
     if (!td->tctx) {
         log_err("Thread resource (tctx) allocation error.");
-        return -1;
+        return XZTL_ZTL_WCA_ERR;
     }
 
     STAILQ_INIT(&td->free_head);
     if (pthread_spin_init(&td->ucmd_spin, 0))
-        return -1;
+        return XZTL_ZTL_WCA_ERR;
     return XZTL_OK;
 }
 

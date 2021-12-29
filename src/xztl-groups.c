@@ -84,7 +84,7 @@ static int groups_zmd_init(struct app_group *grp) {
 
     zmd->tbl = calloc(g->zn_grp, zmd->entry_sz);
     if (!zmd->tbl)
-        return -1;
+        return XZTL_ZTL_GROUP_ERR;
 
     zmd->byte.magic = 0;
 
@@ -114,7 +114,7 @@ FREE:
     free(zmd->tbl);
     log_erra("ztl-group: Zone MD startup failed. Grp: %d", grp->id);
 
-    return -1;
+    return XZTL_ZTL_GROUP_ERR;
 }
 
 static void groups_free(void) {
@@ -143,7 +143,7 @@ static int groups_init(void) {
         grp = calloc(1, sizeof(struct app_group));
         if (!grp) {
             log_err("ztl-groups: Memory allocation failed");
-            return -1;
+            return XZTL_ZTL_GROUP_ERR;
         }
 
         grp->id = grp_i;
@@ -164,7 +164,7 @@ static int groups_init(void) {
 
 FREE:
     groups_free();
-    return -1;
+    return XZTL_ZTL_GROUP_ERR;
 }
 
 void ztl_grp_register(void) {

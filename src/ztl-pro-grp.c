@@ -95,7 +95,7 @@ int ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
                ctx->nsec[zn_i], remain_sec);
     }
 
-    return 0;
+    return XZTL_OK;
 
 NO_LEFT:
     while (zn_i) {
@@ -107,7 +107,7 @@ NO_LEFT:
     }
 
     log_erra("ztl-pro (get): No zones left. Group %d", grp->id);
-    return -1;
+    return XZTL_ZTL_PROV_GRP_ERR;
 }
 
 void ztl_pro_grp_free(struct app_group *grp, uint32_t zone_i, uint32_t nsec) {
@@ -135,7 +135,6 @@ int ztl_pro_grp_node_finish(struct app_group *grp, struct ztl_pro_node *node) {
     struct ztl_pro_zone *zone;
     struct xztl_zn_mcmd cmd;
     int                 ret;
-
 
     for (int i = 0; i < ZTL_PRO_ZONE_NUM_INNODE; i++) {
         /* Explicit closes the zone */
@@ -165,7 +164,7 @@ int ztl_pro_grp_submit_mgmt(struct app_group *grp, struct ztl_pro_node *node,
     mp_cmd = xztl_mempool_get(XZTL_NODE_MGMT_ENTRY, 0);
     if (!mp_cmd) {
         log_err("ztl-wca: Mempool failed.");
-        return -1;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     struct xnvme_node_mgmt_entry *et =
@@ -178,7 +177,7 @@ int ztl_pro_grp_submit_mgmt(struct app_group *grp, struct ztl_pro_node *node,
     pthread_spin_lock(&xnvme_mgmt_spin);
     STAILQ_INSERT_TAIL(&submit_head, et, entry);
     pthread_spin_unlock(&xnvme_mgmt_spin);
-    return 0;
+    return XZTL_OK;
 }
 
 static void *znd_pro_grp_process_mgmt(void *args) {
@@ -230,7 +229,7 @@ int ztl_pro_grp_finish_zn(struct app_group *grp, uint32_t zid, uint8_t type) {
 
     /* Zone is already empty */
     if (!(zmde->flags & XZTL_ZMD_USED))
-        return 0;
+        return XZTL_OK;
 
     /* Zone is already finished */
     return (zmde->wptr == zone->addr.g.sect + zone->capacity) ? 0 : 1;
@@ -256,23 +255,23 @@ int ztl_pro_grp_put_zone(struct app_group *grp, uint32_t zone_i) {
     if (!(zmde->flags & XZTL_ZMD_AVLB)) {
         log_infoa("ztl-pro (put): Cannot PUT an invalid zone (%d/%d)", grp->id,
                   zone_i);
-        return -1;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (zmde->flags & XZTL_ZMD_RSVD) {
         log_infoa("ztl-pro (put): Zone is RESERVED (%d/%d)", grp->id, zone_i);
-        return -2;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (!(zmde->flags & XZTL_ZMD_USED)) {
         log_infoa("ztl-pro (put): Zone is already EMPTY (%d/%d)", grp->id,
                   zone_i);
-        return -3;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (zmde->flags & XZTL_ZMD_OPEN) {
         log_infoa("ztl-pro (put): Zone is still OPEN (%d/%d)", grp->id, zone_i);
-        return -4;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     xztl_atomic_int16_update(&zmde->flags, zmde->flags ^ XZTL_ZMD_USED);
@@ -283,7 +282,7 @@ int ztl_pro_grp_put_zone(struct app_group *grp, uint32_t zone_i) {
     if (ZDEBUG_PRO_GRP)
         ztl_pro_grp_print_status(grp);
 
-    return 0;
+    return XZTL_OK;
 }
 
 static void ztl_pro_grp_zones_free(struct app_group *grp) {
@@ -351,7 +350,7 @@ int ztl_pro_grp_reset_all_zones(struct app_group *grp) {
     if (ret || cmd.status) {
         log_erra("ztl-pro:All zone reset failure . status %d", cmd.status);
     }
-    return 0;
+    return XZTL_OK;
 }
 
 int ztl_pro_grp_node_init(struct app_group *grp) {
@@ -476,13 +475,13 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
                         sizeof(struct xnvme_node_mgmt_entry), NULL, NULL);
     STAILQ_INIT(&submit_head);
     if (pthread_spin_init(&xnvme_mgmt_spin, 0)) {
-        return 1;
+        return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     pthread_create(&mthread.comp_tid, NULL, znd_pro_grp_process_mgmt, NULL);
 
     log_infoa("ztl-pro: Started. Group %d.", grp->id);
-    return 0;
+    return XZTL_OK;
 }
 
 void ztl_pro_grp_exit(struct app_group *grp) {

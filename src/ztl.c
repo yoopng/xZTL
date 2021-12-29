@@ -44,13 +44,13 @@ static int app_init_map_lock(struct app_mpe *mpe) {
 
     mpe->entry_mutex = malloc(sizeof(pthread_mutex_t) * mpe->entries);
     if (!mpe->entry_mutex)
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
 
     for (ent_i = 0; ent_i < mpe->entries; ent_i++) {
         if (pthread_mutex_init(&mpe->entry_mutex[ent_i], NULL))
             goto MUTEX;
     }
-    return 0;
+    return XZTL_OK;
 
 MUTEX:
     while (ent_i) {
@@ -58,7 +58,7 @@ MUTEX:
         pthread_mutex_destroy(&mpe->entry_mutex[ent_i]);
     }
     free(mpe->entry_mutex);
-    return -1;
+    return XZTL_ZTL_MAP_ERR;
 }
 
 static void app_exit_map_lock(struct app_mpe *mpe) {
@@ -88,7 +88,7 @@ static int app_mpe_init(void) {
 
     mpe->tbl = calloc(ZTL_MPE_CPGS, mpe->entry_sz);
     if (!mpe->tbl)
-        return -1;
+        return XZTL_ZTL_MAP_ERR;
 
     mpe->byte.magic = APP_MAGIC;
 
@@ -114,7 +114,7 @@ FREE:
     free(mpe->tbl);
     log_err("ztl-mpe: Persistent Mapping startup failed.");
 
-    return -1;
+    return XZTL_ZTL_MAP_ERR;
 }
 
 static void app_mpe_exit(void) {
@@ -187,7 +187,7 @@ int ztl_mod_set(uint8_t *modset) {
 
     for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++)
         if (modset[mod_i] >= APP_FN_SLOTS)
-            return -1;
+            return XZTL_ZTL_MOD_ERR;
 
     for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++) {
         /* Set pointer if module ID is positive */
@@ -221,7 +221,7 @@ int ztl_mod_set(uint8_t *modset) {
                 mod_i, modset[mod_i], mod);
         }
     }
-    return 0;
+    return XZTL_OK;
 }
 
 int ztl_mod_register(uint8_t modtype, uint8_t modid, void *mod) {
@@ -230,7 +230,7 @@ int ztl_mod_register(uint8_t modtype, uint8_t modid, void *mod) {
             "ztl (mod_register): Module NOT registered. "
             "type: %d, id: %d, ptr: %p\n",
             modtype, modid, mod);
-        return -1;
+        return XZTL_ZTL_MOD_ERR;
     }
 
     ztl()->mod_list[modtype][modid] = mod;
@@ -241,7 +241,7 @@ int ztl_mod_register(uint8_t modtype, uint8_t modid, void *mod) {
         "type: %d, id: %d, ptr: %p\n",
         modtype, modid, mod);
 
-    return 0;
+    return XZTL_OK;
 }
 
 void ztl_exit(void) {
@@ -265,7 +265,7 @@ int ztl_init(void) {
     log_info("ztl: Starting...");
 
     if (ztl_mod_set(app_modset_libztl))
-        return -1;
+        return XZTL_ZTL_MOD_ERR;
 
     ngrps = ztl()->groups.init_fn();
     if (ngrps <= 0)

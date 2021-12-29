@@ -210,7 +210,7 @@ static int znd_media_submit_io(struct xztl_io_mcmd *cmd) {
         default:
             return ZND_INVALID_OPCODE;
     }
-    return 0;
+    return XZTL_OK;
 }
 
 static inline int znd_media_zone_manage(struct xztl_zn_mcmd *cmd, uint8_t op) {

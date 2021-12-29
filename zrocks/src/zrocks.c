@@ -75,7 +75,7 @@ static int __zrocks_write(struct xztl_io_ucmd *ucmd, uint64_t id, void *buf,
     ucmd->xd.tid     = tid;
 
     if (ztl()->wca->submit_fn(ucmd))
-        return -1;
+        return XZTL_ZROCKS_WRITE_ERR;
 
     // free thread data
     *node_id = ucmd->xd.node_id;
@@ -84,7 +84,7 @@ static int __zrocks_write(struct xztl_io_ucmd *ucmd, uint64_t id, void *buf,
     xztl_stats_inc(XZTL_STATS_APPEND_BYTES, new_sz);
     xztl_stats_inc(XZTL_STATS_APPEND_UCMD, 1);
 
-    return 0;
+    return XZTL_OK;
 }
 
 int zrocks_new(uint64_t id, void *buf, size_t size, uint16_t level) {
@@ -99,7 +99,7 @@ int zrocks_new(uint64_t id, void *buf, size_t size, uint16_t level) {
     // ret = __zrocks_write(&ucmd, id, buf, size, level);
 
     // return (!ret) ? ucmd.status : ret;
-    return 0;
+    return XZTL_OK;
 }
 
 int zrocks_write(void *buf, size_t size, int32_t *node_id, int tid) {
@@ -117,13 +117,20 @@ int zrocks_write(void *buf, size_t size, int32_t *node_id, int tid) {
         log_infoa("zrocks (write) done: node_id %d, size %lu, tid is %d \n",
                   *node_id, size, tid);
 
-    if (ret)
-        return ret;
+    if (ret) {
+		 log_erra("__zrocks_write: node_id %d, size %lu, tid is %d  ret %d\n",
+                  *node_id, size, tid, ret);
+		return XZTL_ZROCKS_WRITE_ERR;
+	}
 
-    if (ucmd.status)
-        return ucmd.status;
+    if (ucmd.status) {
+		log_erra("__zrocks_write: node_id %d, size %lu, tid is %d  status %d\n",
+					 *node_id, size, tid, ucmd.status);
+		return XZTL_ZROCKS_WRITE_ERR;
 
-    return 0;
+	}
+
+    return XZTL_OK;
 }
 
 int zrocks_read_obj(uint64_t id, uint64_t offset, void *buf, size_t size) {
@@ -139,7 +146,7 @@ int zrocks_read_obj(uint64_t id, uint64_t offset, void *buf, size_t size) {
     if (ZROCKS_DEBUG)
         log_infoa("  objsec_off %lx, userbytes_off %lu", objsec_off, offset);
 
-    return 0;
+    return XZTL_OK;
 }
 
 int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
@@ -164,7 +171,7 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
                   node_id, offset, size, tid);
 
     if (ztl()->wca->submit_fn(&ucmd))
-        return -1;
+        return XZTL_ZROCKS_READ_ERR;
 
     if (ZROCKS_DEBUG)
         log_infoa("zrocks (read) done: node:%d off %lu, size %lu, tid is %d \n",
@@ -178,7 +185,7 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
         xztl_stats_inc(XZTL_STATS_READ_UCMD, 1);
     }
 
-    return 0;
+    return XZTL_OK;
 }
 
 int zrocks_get_resource() {
@@ -250,19 +257,18 @@ int zrocks_init(const char *dev_name) {
     ztl_wca_register();
 
     if (pthread_spin_init(&zrocks_mp_spin, 0))
-        return -1;
+        return XZTL_ZROCKS_INIT_ERR;
 
     ret = xztl_init(dev_name);
-
     if (ret) {
         pthread_spin_destroy(&zrocks_mp_spin);
-        return -1;
+        return XZTL_ZROCKS_INIT_ERR;
     }
 
     ret = xztl_init_thread_ctxs();
     if (ret) {
         pthread_spin_destroy(&zrocks_mp_spin);
-        return -1;
+        return XZTL_ZROCKS_INIT_ERR;
     }
 
     if (xztl_mempool_create(ZROCKS_MEMORY, 0, ZROCKS_BUF_ENTS,

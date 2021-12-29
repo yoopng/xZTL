@@ -69,11 +69,11 @@ int ztl_metadata_init(struct app_group *grp) {
     metadata.metadata_zone = (struct ztl_pro_zone *)calloc(metadata.zone_num,
                                                            sizeof(struct ztl_pro_zone));
     if (!metadata.metadata_zone) {
-        return XZTL_ZTL_MD_ERR;
+        return XZTL_ZTL_MD_INIT_ERR;
     }
 
     if (pthread_mutex_init(&metadata.page_spin, 0)) {
-        return XZTL_ZTL_MD_ERR;
+        return XZTL_ZTL_MD_INIT_ERR;
     }
 
     for (zone_i = 0; zone_i < metadata.zone_num; zone_i++) {
@@ -91,12 +91,12 @@ int ztl_metadata_init(struct app_group *grp) {
 
         if (!(zmde->flags & XZTL_ZMD_AVLB)) {
             log_infoa("ztl-metadata: Cannot read an invalid zone (%d)", zone_i);
-            return -1;
+            return XZTL_ZTL_MD_INIT_ERR;
         }
 
         if (zmde->flags & XZTL_ZMD_RSVD) {
             log_infoa("ztl-metadata: Zone is RESERVED (%d)", zone_i);
-            return -2;
+            return XZTL_ZTL_MD_INIT_ERR;
         }
 
         zone->addr.addr = zmde->addr.addr;
@@ -124,7 +124,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
             left_nlb > MAX_READ_NLB_NUM ? MAX_READ_NLB_NUM : left_nlb;
         mp_entry = xztl_mempool_get(ZROCKS_MEMORY, 0);
         if (!mp_entry) {
-            return -1;
+            return XZTL_ZTL_MD_READ_ERR;
         }
 
         struct xztl_io_mcmd cmd;
@@ -140,7 +140,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
         if (ret) {
             xztl_mempool_put(mp_entry, ZROCKS_MEMORY, 0);
             log_erra("zrocks_read_metadata error: %d", ret);
-            return ret;
+            return XZTL_ZTL_MD_READ_ERR;
         }
 
         memcpy(buf, (unsigned char *)mp_entry->opaque, read_nlb * ZNS_ALIGMENT);
@@ -150,7 +150,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
         slba += read_nlb;
     }
 
-    return ret;
+    return XZTL_OK;
 }
 
 static inline int zrocks_reset_file_md(uint8_t reset_op) {
@@ -171,7 +171,7 @@ static inline int zrocks_reset_file_md(uint8_t reset_op) {
             break;
         }
     }
-    return err;
+    return XZTL_ZTL_MD_RESET_ERR;
 }
 
 int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
@@ -211,5 +211,5 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
         remain_len -= write_len;
     }
     pthread_mutex_unlock(&metadata.page_spin);
-    return err;
+    return XZTL_ZTL_MD_WRITE_ERR;
 }

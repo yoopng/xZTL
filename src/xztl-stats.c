@@ -171,9 +171,9 @@ int xztl_stats_init(void) {
 #if XZTL_PROMETHEUS
     if (xztl_prometheus_init()) {
         log_err("xztl-stats: Prometheus not started.");
-        return -1;
+        return XZTL_ZTL_STATS_ERR;
     }
 #endif
 
-    return 0;
+    return XZTL_OK;
 }
