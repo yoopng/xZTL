@@ -62,8 +62,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
 
     if (mcmd->status) {
-        ZDEBUG(ZDEBUG_WCA,
-               "ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d",
+        log_erra("ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d\n",
                ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                ucmd->moffset[mcmd->sequence], mcmd->status);
     }
@@ -160,8 +159,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
 
     if (mcmd->status)
-        ZDEBUG(ZDEBUG_WCA,
-               "ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d",
+        log_erra("ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d\n",
                ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                ucmd->moffset[mcmd->sequence], mcmd->status);
 
@@ -238,7 +236,7 @@ static int ztl_thd_submit(struct xztl_io_ucmd *ucmd) {
         if (ucmd->prov_type == XZTL_CMD_READ) {
             ret = ztl_wca_read_ucmd(ucmd, ucmd->xd.node_id, ucmd->offset, ucmd->size);
         } else if (ucmd->prov_type == XZTL_CMD_WRITE) {
-            ztl_wca_write_ucmd(ucmd, &ucmd->xd.node_id);
+            ret = ztl_wca_write_ucmd(ucmd, &ucmd->xd.node_id);
         }
 
     } else {
@@ -426,7 +424,7 @@ FAIL_SUBMIT:
     return ret;
 }
 
-void ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
+int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
     struct app_pro_addr *prov;
     struct xztl_io_mcmd *mcmd;
     struct xztl_core *   core;
@@ -594,7 +592,7 @@ void ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
 
     ZDEBUG(ZDEBUG_WCA, "  Submitted: %d", submitted);
 
-    return;
+    return XZTL_OK;
 
     /* If we get a submit failure but previous I/Os have been
      * submitted, we fail all subsequent I/Os and completion is
@@ -609,6 +607,7 @@ FAIL_NCMD:
 FAILURE:
     ucmd->status    = XZTL_ZTL_WCA_S_ERR;
     ucmd->completed = 1;
+    return XZTL_ZTL_WCA_S_ERR;
 }
 
 static void *ztl_process_th(void *arg) {

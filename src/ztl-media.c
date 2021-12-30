@@ -57,6 +57,7 @@ static void znd_media_async_cb(struct xnvme_cmd_ctx *ctx, void *cb_arg) {
         cmd->paddr[sec_i] = cmd->addr[sec_i].g.sect;
 
     if (cmd->status) {
+        log_erra("znd_media_async_cb: err status[%u]  opaque: %p \n", cmd->status, cmd->opaque);
         xztl_print_mcmd(cmd);
         xnvme_cmd_ctx_pr(ctx, XNVME_PR_DEF);
     }
@@ -87,8 +88,10 @@ static int znd_media_submit_read_synch(struct xztl_io_mcmd *cmd) {
     /* WARNING: Uncommenting this line causes performance drop */
     // xztl_prometheus_add_read_latency (cmd->us_end - cmd->us_start);
 
-    if (ret)
+    if (ret) {
+        log_erra("znd_media_submit_read_synch: err ret[%d]  opaque: %p \n", ret, cmd->opaque);
         xztl_print_mcmd(cmd);
+    }
 
     return ret;
 }
@@ -117,8 +120,10 @@ static int znd_media_submit_read_asynch(struct xztl_io_mcmd *cmd) {
 
     ret = xnvme_nvm_read(xnvme_ctx, xnvme_dev_get_nsid(zndmedia.dev), slba,
                          (uint16_t)cmd->nsec[sec_i] - 1, dbuf, NULL);
-    if (ret)
+    if (ret) {
+        log_erra("znd_media_submit_read_asynch: err ret[%d]  opaque: %p \n", ret, cmd->opaque);
         xztl_print_mcmd(cmd);
+    }
 
     return ret;
 }
@@ -152,6 +157,7 @@ static int znd_media_submit_write_asynch(struct xztl_io_mcmd *cmd) {
                           (uint16_t)cmd->nsec[sec_i] - 1, dbuf, NULL);
 
     if (ret) {
+        log_erra("znd_media_submit_write_asynch: xnvme_nvm_write err ret[%d]  opaque: %p \n", ret, cmd->opaque);
         xnvme_queue_put_cmd_ctx(tctx->queue, xnvme_ctx);
         xztl_print_mcmd(cmd);
     }
@@ -190,8 +196,10 @@ static int znd_media_submit_append_asynch(struct xztl_io_mcmd *cmd) {
                                  zlba, (uint16_t)cmd->nsec[zone_i] - 1, dbuf,
                                  NULL)
               : -1;
-    if (ret)
+    if (ret) {
+        log_erra("znd_media_submit_append_asynch: xnvme_znd_append err ret[%d]  opaque: %p \n", ret, cmd->opaque);
         xztl_print_mcmd(cmd);
+    }
 
     return ret;
 }
@@ -231,6 +239,9 @@ static inline int znd_media_zone_manage(struct xztl_zn_mcmd *cmd, uint8_t op) {
     ret = xnvme_znd_mgmt_send(&xnvme_ctx, xnvme_dev_get_nsid(zndmedia.dev), lba,
                               select_all, op, 0x0, NULL);
     cmd->status = (ret) ? xnvme_cmd_ctx_cpl_status(&xnvme_ctx) : XZTL_OK;
+    if (ret) {
+        log_erra("znd_media_zone_manage:  err ret[%d]    cmd->addr.g.zone: %lu \n", ret, cmd->addr.g.zone);
+    }
     // return (ret) ? op : XZTL_OK;
     return ret;
 }
@@ -245,8 +256,10 @@ static int znd_media_zone_report(struct xztl_zn_mcmd *cmd) {
               // * zndmedia.devgeo->nsect;
     limit = 0;  // cmd->nzones;
     rep   = xnvme_znd_report_from_dev(zndmedia.dev, lba, limit, 0);
-    if (!rep)
+    if (!rep) {
+        log_err("znd_media_zone_report: rep is NULL \n");
         return ZND_MEDIA_REPORT_ERR;
+    }
 
     cmd->opaque = (void *)rep;  // NOLINT
 
@@ -289,9 +302,10 @@ static int znd_media_async_poke(struct xnvme_queue *queue, uint32_t *c,
                                 uint16_t max) {
     int ret;
     ret = xnvme_queue_poke(queue, max);
-    if (ret < 0)
+    if (ret < 0) {
+        log_erra("znd_media_async_poke: c[%u] max[%u] \n", *c, max);
         return ZND_MEDIA_POKE_ERR;
-
+    }
     *c = ret;
 
     return XZTL_OK;
@@ -301,8 +315,10 @@ static int znd_media_async_outs(struct xnvme_queue *queue, uint32_t *c) {
     int ret;
 
     ret = xnvme_queue_get_outstanding(queue);
-    if (ret < 0)
+    if (ret < 0) {
+        log_erra("znd_media_async_outs: c[%u] \n", *c);
         return ZND_MEDIA_OUTS_ERR;
+    }
 
     *c = ret;
 
@@ -313,8 +329,10 @@ static int znd_media_async_wait(struct xnvme_queue *queue, uint32_t *c) {
     int ret;
 
     ret = xnvme_queue_get_outstanding(queue);
-    if (ret)
+    if (ret) {
+        log_erra("znd_media_async_wait: c[%u] \n", *c);
         return ZND_MEDIA_WAIT_ERR;
+    }
 
     *c = ret;
 
@@ -329,6 +347,7 @@ static int znd_media_asynch_init(struct xztl_misc_cmd *cmd) {
 
     ret = xnvme_queue_init(zndmedia.dev, cmd->asynch.depth, 0, &tctx->queue);
     if (ret) {
+        log_erra("znd_media_asynch_init: error depth[%u] \n", cmd->asynch.depth);
         return ZND_MEDIA_ASYNCH_ERR;
     }
 
@@ -339,9 +358,10 @@ static int znd_media_asynch_term(struct xztl_misc_cmd *cmd) {
     int ret;
 
     ret = xnvme_queue_term(cmd->asynch.ctx_ptr->queue);
-    if (ret)
+    if (ret) {
+        log_erra("znd_media_asynch_term: error ret[%u] \n", ret);
         return ZND_MEDIA_ASYNCH_ERR;
-
+    }
     return XZTL_OK;
 }
 

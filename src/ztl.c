@@ -43,12 +43,17 @@ static int app_init_map_lock(struct app_mpe *mpe) {
     uint32_t ent_i;
 
     mpe->entry_mutex = malloc(sizeof(pthread_mutex_t) * mpe->entries);
-    if (!mpe->entry_mutex)
+    if (!mpe->entry_mutex) {
+        log_err("app_init_map_lock: mpe->entry_mutex is NULL \n");
         return XZTL_ZTL_MAP_ERR;
 
+    }
+
     for (ent_i = 0; ent_i < mpe->entries; ent_i++) {
-        if (pthread_mutex_init(&mpe->entry_mutex[ent_i], NULL))
+        if (pthread_mutex_init(&mpe->entry_mutex[ent_i], NULL)) {
+            log_erra("app_init_map_lock: pthread_mutex_init failed ent_i [%u] is NULL \n", ent_i);
             goto MUTEX;
+        }
     }
     return XZTL_OK;
 
@@ -87,8 +92,10 @@ static int app_mpe_init(void) {
     mpe->entries    = ZTL_MPE_CPGS;
 
     mpe->tbl = calloc(ZTL_MPE_CPGS, mpe->entry_sz);
-    if (!mpe->tbl)
+    if (!mpe->tbl) {
+        log_err("app_mpe_init: mpe->tbl is NULL \n");
         return XZTL_ZTL_MAP_ERR;
+    }
 
     mpe->byte.magic = APP_MAGIC;
 
@@ -98,8 +105,10 @@ static int app_mpe_init(void) {
     /* Create and flush mpe table if it does not exist */
     if (mpe->byte.magic == APP_MAGIC) {
         ret = ztl()->mpe->create_fn();
-        if (ret)
+        if (ret) {
+            log_erra("app_mpe_init: pthread_mcreate_fnutex_init failed ret [%d] \n", ret);
             goto LOCK;
+        }
     }
 
     /* TODO: Setup tiny table if we implement recovery at the ZTL */
@@ -185,9 +194,12 @@ int ztl_mod_set(uint8_t *modset) {
     int   mod_i;
     void *mod;
 
-    for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++)
-        if (modset[mod_i] >= APP_FN_SLOTS)
+    for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++) {
+        if (modset[mod_i] >= APP_FN_SLOTS) {
+            log_erra("ztl_mod_set: modset data mod_i [%d] data[%u] \n", mod_i, modset[mod_i]);
             return XZTL_ZTL_MOD_ERR;
+        }
+    }
 
     for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++) {
         /* Set pointer if module ID is positive */
@@ -261,20 +273,23 @@ int ztl_init(void) {
     app_ngrps = 0;
 
     ztl_grp_register();
-
     log_info("ztl: Starting...");
-
-    if (ztl_mod_set(app_modset_libztl))
+    if (ztl_mod_set(app_modset_libztl)) {
+        log_err("ztl_init: ztl_mod_set err \n");
         return XZTL_ZTL_MOD_ERR;
+    }
 
     ngrps = ztl()->groups.init_fn();
-    if (ngrps <= 0)
+    if (ngrps <= 0) {
+        log_erra("ztl_init: ngrps is [%d] \n", ngrps);
         return XZTL_ZTL_GROUP_ERR;
+    }
 
     app_ngrps = ngrps;
 
     ret = app_global_init();
     if (ret) {
+        log_erra("ztl_init: app_global_init failed ret [%d] \n", ret);
         ztl()->groups.exit_fn();
         return ret;
     }

@@ -68,7 +68,7 @@ int ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
             (remain_sec >= ZTL_READ_SEC_MCMD ? ZTL_READ_SEC_MCMD : remain_sec);
 
         if (sec_avlb < actual_sec) {
-            printf(
+            log_erra(
                 "ztl-pro-grp: left sector is not enough sec_avlb[%u] "
                 "actual_sec[%u] remain_sec[%d]",
                 sec_avlb, actual_sec, remain_sec);
@@ -206,7 +206,7 @@ static void *znd_pro_grp_process_mgmt(void *args) {
             }
 
             if (ret) {
-                printf("znd_pro_grp_process_mgmt ret[%d]\n", ret);
+                log_erra("znd_pro_grp_process_mgmt ret[%d]\n", ret);
             }
 
             xztl_mempool_put(et->mp_entry, XZTL_NODE_MGMT_ENTRY, 0);
@@ -305,6 +305,7 @@ int ztl_pro_grp_node_reset(struct app_group *grp, struct ztl_pro_node *node) {
         zone = node->vzones[i];
         ret  = ztl_pro_node_reset_zn(zone);
         if (ret) {
+            log_erra("ztl_pro_grp_node_reset: Zone: %lu reset failure\n", zone->addr.g.zone);
             xztl_atomic_int32_update(&node->nr_reset_err,
                                      node->nr_reset_err + 1);
             goto ERR;
@@ -348,7 +349,7 @@ int ztl_pro_grp_reset_all_zones(struct app_group *grp) {
 
     ret = xztl_media_submit_zn(&cmd);
     if (ret || cmd.status) {
-        log_erra("ztl-pro:All zone reset failure . status %d", cmd.status);
+        log_erra("ztl-pro:All zone reset failure. ret %d status %d\n", ret, cmd.status);
     }
     return XZTL_OK;
 }
@@ -374,18 +375,21 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
     int32_t node_num = grp->zmd.entries / ZTL_PRO_ZONE_NUM_INNODE;
     pro->vnodes      = calloc(node_num, sizeof(struct ztl_pro_node));
     if (!pro->vnodes) {
+        log_err("ztl_pro_grp_node_init: pro->vnodes is NULL\n");
         free(pro);
         return XZTL_ZTL_PROV_ERR;
     }
     pro->vzones = calloc(grp->zmd.entries, sizeof(struct ztl_pro_zone));
     if (!pro->vzones) {
         // vnodes have been claimed
+        log_err("ztl_pro_grp_node_init: pro->vzones is NULL\n");
         free(pro->vnodes);
         free(pro);
         return XZTL_ZTL_PROV_ERR;
     }
 
     if (pthread_spin_init(&pro->spin, 0)) {
+        log_err("ztl_pro_grp_node_init: pthread_spin_init failed\n");
         free(pro->vnodes);
         free(pro->vzones);
         return XZTL_ZTL_PROV_ERR;
@@ -418,7 +422,7 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
                      zmde->addr.g.grp, zmde->addr.g.zone, grp->id, zone_i);
 
         if ((zmde->flags & XZTL_ZMD_RSVD) || !(zmde->flags & XZTL_ZMD_AVLB)) {
-            printf("flags: %x\n", zmde->flags);
+            log_infoa("flags: %x\n", zmde->flags);
             continue;
         }
 

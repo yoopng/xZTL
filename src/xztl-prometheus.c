@@ -226,11 +226,13 @@ void xztl_prometheus_add_read_latency(uint64_t usec) {
 
     /* Discard latency if queue is full */
     if (xztl_mempool_left(XZTL_PROMETHEUS_LAT, 0) == 0) {
+        log_err("xztl_prometheus_add_read_latency: xztl_mempool_left XZTL_PROMETHEUS_LAT 0.\n");
         pthread_spin_unlock(&lat_spin);
         return;
     }
     mp_ent = xztl_mempool_get(XZTL_PROMETHEUS_LAT, 0);
     if (!mp_ent) {
+        log_err("xztl_prometheus_add_read_latency: xztl_mempool_get XZTL_PROMETHEUS_LAT is NULL.\n");
         pthread_spin_unlock(&lat_spin);
         return;
     }

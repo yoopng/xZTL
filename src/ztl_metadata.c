@@ -69,10 +69,12 @@ int ztl_metadata_init(struct app_group *grp) {
     metadata.metadata_zone = (struct ztl_pro_zone *)calloc(metadata.zone_num,
                                                            sizeof(struct ztl_pro_zone));
     if (!metadata.metadata_zone) {
+        log_err("ztl_metadata_init failed:metadata.metadata_zone is NULL \n");
         return XZTL_ZTL_MD_INIT_ERR;
     }
 
     if (pthread_mutex_init(&metadata.page_spin, 0)) {
+        log_err("ztl_metadata_init failed: pthread_mutex_init failed \n");
         return XZTL_ZTL_MD_INIT_ERR;
     }
 
@@ -86,16 +88,16 @@ int ztl_metadata_init(struct app_group *grp) {
         zmde = ztl()->zmd->get_fn(grp, zone_i, 0);
 
         if (zmde->addr.g.zone != zone_i || zmde->addr.g.grp != grp->id)
-            log_erra("ztl-pro: zmd entry address does not match (%d/%d)(%d/%d)",
+            log_erra("ztl-pro: zmd entry address does not match (%d/%d)(%d/%d)\n",
                      zmde->addr.g.grp, zmde->addr.g.zone, grp->id, zone_i);
 
         if (!(zmde->flags & XZTL_ZMD_AVLB)) {
-            log_infoa("ztl-metadata: Cannot read an invalid zone (%d)", zone_i);
+            log_erra("ztl-metadata: Cannot read an invalid zone (%d)\n", zone_i);
             return XZTL_ZTL_MD_INIT_ERR;
         }
 
         if (zmde->flags & XZTL_ZMD_RSVD) {
-            log_infoa("ztl-metadata: Zone is RESERVED (%d)", zone_i);
+            log_erra("ztl-metadata: Zone is RESERVED (%d)\n", zone_i);
             return XZTL_ZTL_MD_INIT_ERR;
         }
 
@@ -124,6 +126,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
             left_nlb > MAX_READ_NLB_NUM ? MAX_READ_NLB_NUM : left_nlb;
         mp_entry = xztl_mempool_get(ZROCKS_MEMORY, 0);
         if (!mp_entry) {
+            log_err("zrocks_read_metadata: xztl_mempool_get memory failed\n");
             return XZTL_ZTL_MD_READ_ERR;
         }
 
@@ -139,7 +142,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
         ret                = xztl_media_submit_io(&cmd);
         if (ret) {
             xztl_mempool_put(mp_entry, ZROCKS_MEMORY, 0);
-            log_erra("zrocks_read_metadata error: %d", ret);
+            log_erra("zrocks_read_metadata error: %d\n", ret);
             return XZTL_ZTL_MD_READ_ERR;
         }
 
@@ -167,7 +170,7 @@ static inline int zrocks_reset_file_md(uint8_t reset_op) {
             reset_op, 0, NULL);
 
         if (err) {
-            log_erra("znd_cmd_mgmt_send. err %d", err);
+            log_erra("znd_cmd_mgmt_send. err %d\n", err);
             break;
         }
     }
@@ -210,6 +213,12 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
         data += write_len;
         remain_len -= write_len;
     }
+
     pthread_mutex_unlock(&metadata.page_spin);
-    return XZTL_ZTL_MD_WRITE_ERR;
+    if (ret) {
+        log_erra("zrocks_write_file_metadata. metadata.file_slb[%lu] sec [%u] err %d\n", metadata.file_slba, nlb, err);
+        return XZTL_ZTL_MD_WRITE_ERR;
+    }
+    
+    return XZTL_OK;
 }

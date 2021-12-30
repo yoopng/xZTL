@@ -72,6 +72,7 @@ static int map_evict_pg_cache(struct map_cache *cache, uint8_t is_checkpoint) {
     cache_ent = TAILQ_FIRST(&cache->mbu_head);
     if (!cache_ent) {
         pthread_spin_unlock(&cache->mb_spin);
+        log_err("map_evict_pg_cache: cache_entis NULL.\n",);
         return XZTL_ZTL_MAP_ERR;
     }
 
@@ -109,6 +110,7 @@ WAIT:
 
         pthread_mutex_lock(&cache->mutex);
         if (map_evict_pg_cache(cache, 0)) {
+            log_err("map_load_pg_cache: map_evict_pg_cache err.\n",);
             pthread_mutex_unlock(&cache->mutex);
             return XZTL_ZTL_MAP_ERR;
         }
@@ -118,6 +120,7 @@ WAIT:
     pthread_spin_lock(&cache->mb_spin);
     cache_ent = LIST_FIRST(&cache->mbf_head);
     if (!cache_ent) {
+        log_err("map_load_pg_cache: LIST_FIRST cache_entis NULL.\n",);
         pthread_spin_unlock(&cache->mb_spin);
         return XZTL_ZTL_MAP_ERR;
     }
@@ -144,6 +147,7 @@ WAIT:
             LIST_INSERT_HEAD(&cache->mbf_head, cache_ent, f_entry);
             cache->nfree++;
             pthread_spin_unlock(&cache->mb_spin);
+            log_err("map_load_pg_cache: map_nvm_read err.\n",);
 
             return XZTL_ZTL_MAP_ERR;
         }
@@ -174,12 +178,14 @@ static int map_init_cache(struct map_cache *cache) {
         return XZTL_ZTL_MAP_ERR;
     }
 
-    if (pthread_spin_init(&cache->mb_spin, 0))
+    if (pthread_spin_init(&cache->mb_spin, 0)) {
+         log_err("map_init_cache: pthread_spin_init cache->mb_spin failed.\n");
         goto FREE_BUF;
-
-    if (pthread_mutex_init(&cache->mutex, NULL))
+    }
+    if (pthread_mutex_init(&cache->mutex, NULL)) {
+        log_err("map_init_cache: pthread_mutex_init cache->mutex failed.\n");
         goto SPIN;
-
+    }
     cache->mbf_head.lh_first = NULL;
     LIST_INIT(&cache->mbf_head);
     TAILQ_INIT(&cache->mbu_head);
@@ -194,9 +200,11 @@ static int map_init_cache(struct map_cache *cache) {
         cache->pg_buf[pg_i].cache     = cache;
 
         cache->pg_buf[pg_i].buf = calloc(1, map_pg_sz);
-        if (!cache->pg_buf[pg_i].buf)
+        if (!cache->pg_buf[pg_i].buf) {
+            log_erra("map_init_cache: pg_buf pg_i[%u] buf is null.\n", pg_i);
             goto FREE_PGS;
-
+        }
+        
         LIST_INSERT_HEAD(&cache->mbf_head, &cache->pg_buf[pg_i], f_entry);
         cache->nfree++;
     }
@@ -264,15 +272,19 @@ static int map_init(void) {
     get_xztl_core(&core);
     uint32_t cache_i;
     map_caches = calloc(MAP_N_CACHES, sizeof(struct map_cache));
-    if (!map_caches)
+    if (!map_caches) {
+        log_err("map_init: map_caches is NULL.\n");
         return XZTL_ZTL_MAP_ERR;
-
+    }
+    
     map_pg_sz      = (ZTL_MPE_PG_SEC * core->media->geo.nbytes);
     map_ent_per_pg = map_pg_sz / sizeof(struct app_map_entry);
 
     for (cache_i = 0; cache_i < MAP_N_CACHES; cache_i++) {
-        if (map_init_cache(&map_caches[cache_i]))
+        if (map_init_cache(&map_caches[cache_i])) {
+            log_erra("map_init_cache: cache_i cache_i[%u] buf is null.\n", cache_i);
             goto EXIT_CACHES;
+        }
 
         map_caches[cache_i].id = cache_i;
     }
@@ -373,9 +385,10 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
     ZDEBUG(ZDEBUG_MAP, "ztl-map: upsert. ID: %lu, off %d.", id, ent_off);
 
     cache_ent = map_get_cache_entry(id);
-    if (!cache_ent)
+    if (!cache_ent) {
+        log_err("map_upsert: cache_ent is NULL.\n");
         return XZTL_ZTL_MAP_ERR;
-
+    }
     map_ent = &((struct app_map_entry *)cache_ent->buf)[ent_off]; // NOLINT
 
     /* Fill old ADDR pointer, caller may use to invalidate the addr for GC */
@@ -385,6 +398,7 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
        'old_caller' as 0. GC, for example, sets 'old_caller' with the old
        sector address. If other thread has updated it, keep the current value.*/
     if (old_caller && map_ent->addr != old_caller) {
+        log_erra("map_upsert: map_ent->addr[%p] != old_caller[%p].\n", map_ent->addr, old_caller);
         return XZTL_ZTL_MAP_ERR;
     }
 
@@ -411,9 +425,10 @@ static uint64_t map_read(uint64_t id) {
     ZDEBUG(ZDEBUG_MAP, "ztl-map: read. ID: %lu, off %d.", id, ent_off);
 
     cache_ent = map_get_cache_entry(id);
-    if (!cache_ent)
+    if (!cache_ent) {
+        log_err("map_read: cache_ent is NULL ID %lu\n");
         return AND64;
-
+    }
     map_ent = &((struct app_map_entry *)cache_ent->buf)[ent_off]; // NOLINT
 
     ret = map_ent->g.offset;

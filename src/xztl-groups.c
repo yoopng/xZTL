@@ -142,15 +142,17 @@ static int groups_init(void) {
     for (grp_i = 0; grp_i < core->media->geo.ngrps; grp_i++) {
         grp = calloc(1, sizeof(struct app_group));
         if (!grp) {
-            log_err("ztl-groups: Memory allocation failed");
+            log_err("groups_init: Memory allocation failed\n");
             return XZTL_ZTL_GROUP_ERR;
         }
 
         grp->id = grp_i;
 
         /* Initialize zone metadata */
-        if (groups_zmd_init(grp))
+        if (groups_zmd_init(grp)) {
+            log_err("groups_init: groups_zmd_init failed\n");
             goto FREE;
+        }
 
         /* Enable group */
         app_grp_switch_on(grp);
