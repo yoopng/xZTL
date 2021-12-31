@@ -106,14 +106,14 @@ static int app_mpe_init(void) {
     if (mpe->byte.magic == APP_MAGIC) {
         ret = ztl()->mpe->create_fn();
         if (ret) {
-            log_erra("app_mpe_init: pthread_mcreate_fnutex_init failed ret [%d] \n", ret);
+            log_erra("app_mpe_init: pthread_mcreate_fnutex_init failed ret [%d]\n", ret);
             goto LOCK;
         }
     }
 
     /* TODO: Setup tiny table if we implement recovery at the ZTL */
 
-    log_info("ztl-mpe: Persistent Mapping started.");
+    log_info("app_mpe_init: Persistent Mapping started.");
 
     return XZTL_OK;
 
@@ -121,7 +121,7 @@ LOCK:
     app_exit_map_lock(mpe);
 FREE:
     free(mpe->tbl);
-    log_err("ztl-mpe: Persistent Mapping startup failed.");
+    log_err("app_mpe_init: Persistent Mapping startup failed.");
 
     return XZTL_ZTL_MAP_ERR;
 }
@@ -137,27 +137,27 @@ static int app_global_init(void) {
 
     ret = ztl()->pro->init_fn();
     if (ret) {
-        log_erra("[ztl: Provisioning NOT started. ret: 0x%x\n", ret);
+        log_erra("app_global_init: Provisioning NOT started. ret [0x%x]\n", ret);
         return XZTL_ZTL_PROV_ERR;
     }
 
     ret = app_mpe_init();
     if (ret) {
-        log_err("[ztl: Persistent mapping NOT started.\n");
+        log_err("app_global_init: Persistent mapping NOT started.\n");
         ret = XZTL_ZTL_MPE_ERR;
         goto PRO;
     }
 
     ret = ztl()->map->init_fn();
     if (ret) {
-        log_err("[ztl: Mapping NOT started.\n");
+        log_err("app_global_init: Mapping NOT started.\n");
         ret = XZTL_ZTL_MAP_ERR;
         goto MPE;
     }
 
     ret = ztl()->wca->init_fn();
     if (ret) {
-        log_err("[ztl: Write-cache NOT started.\n");
+        log_err("app_global_init: Write-cache NOT started.\n");
         ret = XZTL_ZTL_WCA_ERR;
         goto MAP;
     }
@@ -196,7 +196,7 @@ int ztl_mod_set(uint8_t *modset) {
 
     for (mod_i = 0; mod_i < APP_MOD_COUNT; mod_i++) {
         if (modset[mod_i] >= APP_FN_SLOTS) {
-            log_erra("ztl_mod_set: modset data mod_i [%d] data[%u] \n", mod_i, modset[mod_i]);
+            log_erra("ztl_mod_set: modset data mod_i [%d] data[%u]\n", mod_i, modset[mod_i]);
             return XZTL_ZTL_MOD_ERR;
         }
     }
@@ -225,11 +225,11 @@ int ztl_mod_set(uint8_t *modset) {
                     ztl()->wca = (struct app_wca_mod *)mod;
                     break;
                 default:
-                    log_erra("ztl: Invalid module ID: %d", mod_i);
+                    log_erra("ztl_mod_set: Invalid module ID [%d]", mod_i);
             }
             log_infoa(
-                "ztl: Module set. "
-                "type: %d, id: %d, ptr: %p\n",
+                "ztl_mod_set: "
+                "type [%d], id [%d], ptr [%p]\n",
                 mod_i, modset[mod_i], mod);
         }
     }
@@ -239,8 +239,8 @@ int ztl_mod_set(uint8_t *modset) {
 int ztl_mod_register(uint8_t modtype, uint8_t modid, void *mod) {
     if (modid >= APP_FN_SLOTS || modtype >= APP_MOD_COUNT || !mod) {
         log_erra(
-            "ztl (mod_register): Module NOT registered. "
-            "type: %d, id: %d, ptr: %p\n",
+            "ztl_mod_register: Module NOT registered. "
+            "type: [%d], id [%d], ptr [%p]\n",
             modtype, modid, mod);
         return XZTL_ZTL_MOD_ERR;
     }
@@ -249,8 +249,8 @@ int ztl_mod_register(uint8_t modtype, uint8_t modid, void *mod) {
     app_modset_libztl[modtype]      = modid;
 
     log_infoa(
-        "ztl: Module registered. "
-        "type: %d, id: %d, ptr: %p\n",
+        "ztl_mod_register: "
+        "type [%d], id [%d], ptr [%p]\n",
         modtype, modid, mod);
 
     return XZTL_OK;
@@ -263,7 +263,7 @@ void ztl_exit(void) {
     app_global_exit();
     ztl()->groups.exit_fn();
     */
-    log_info("ztl: Closed successfully.");
+    log_info("ztl_exit: Closed successfully.");
 }
 
 int ztl_init(void) {
@@ -275,13 +275,13 @@ int ztl_init(void) {
     ztl_grp_register();
     log_info("ztl: Starting...");
     if (ztl_mod_set(app_modset_libztl)) {
-        log_err("ztl_init: ztl_mod_set err \n");
+        log_err("ztl_init: ztl_mod_set err\n");
         return XZTL_ZTL_MOD_ERR;
     }
 
     ngrps = ztl()->groups.init_fn();
     if (ngrps <= 0) {
-        log_erra("ztl_init: ngrps is [%d] \n", ngrps);
+        log_erra("ztl_init: ngrps is [%d]\n", ngrps);
         return XZTL_ZTL_GROUP_ERR;
     }
 
@@ -289,12 +289,12 @@ int ztl_init(void) {
 
     ret = app_global_init();
     if (ret) {
-        log_erra("ztl_init: app_global_init failed ret [%d] \n", ret);
+        log_erra("ztl_init: app_global_init failed ret [%d]\n", ret);
         ztl()->groups.exit_fn();
         return ret;
     }
 
-    log_info("ztl: Started successfully.");
+    log_info("ztl_init: Started successfully.");
 
     return XZTL_OK;
 }

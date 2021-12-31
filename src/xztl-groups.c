@@ -63,9 +63,9 @@ static void groups_zmd_exit(void) {
     struct app_group *grp;
 
     LIST_FOREACH(grp, &app_grp_head, entry) {
+        log_infoa("groups_zmd_exit: Zone MD stopped. Grp [%d]", grp->id);
         xnvme_buf_virt_free(grp->zmd.report);
         free(grp->zmd.tbl);
-        log_infoa("ztl-group: Zone MD stopped. Grp: %d", grp->id);
     }
 }
 
@@ -90,7 +90,7 @@ static int groups_zmd_init(struct app_group *grp) {
 
     ret = ztl()->zmd->load_fn(grp);
     if (ret) {
-        log_erra("err report %d", ret);
+        log_erra("groups_zmd_init: err report [%d]\n", ret);
         goto FREE;
     }
 
@@ -98,22 +98,21 @@ static int groups_zmd_init(struct app_group *grp) {
     if (zmd->byte.magic == APP_MAGIC) {
         ret = ztl()->zmd->create_fn(grp);
         if (ret) {
-            log_erra("err report2: %d", ret);
+            log_erra("groups_zmd_init: create_fn err [%d]\n", ret);
             goto FREE_REP;
         }
     }
 
     /* TODO: Setup tiny table */
-    log_infoa("ztl-group: Zone MD started. Grp: %d", grp->id);
+    log_infoa("groups_zmd_init: Zone MD started. Grp [%d]", grp->id);
 
     return XZTL_OK;
 
 FREE_REP:
     xnvme_buf_virt_free(zmd->report);
 FREE:
+    log_erra("groups_zmd_init: Zone MD startup failed. Grp [%d]", grp->id);
     free(zmd->tbl);
-    log_erra("ztl-group: Zone MD startup failed. Grp: %d", grp->id);
-
     return XZTL_ZTL_GROUP_ERR;
 }
 
@@ -160,7 +159,7 @@ static int groups_init(void) {
         LIST_INSERT_HEAD(&app_grp_head, grp, entry);
     }
 
-    log_infoa("ztl-groups: %d groups started. ", grp_i);
+    log_infoa("ztl-groups: [%d] groups started. ", grp_i);
 
     return grp_i;
 

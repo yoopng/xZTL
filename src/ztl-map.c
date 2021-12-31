@@ -163,7 +163,7 @@ WAIT:
     cache->nused++;
     pthread_spin_unlock(&cache->mb_spin);
 
-    ZDEBUG(ZDEBUG_MAP, "ztl-map: Page cache loaded. Offset 0x%lu",
+    ZDEBUG(ZDEBUG_MAP, "map_load_pg_cache: Page cache loaded. Offset [0x%lu]",
            (uint64_t)cache_ent->addr.g.offset);
 
     return XZTL_OK;
@@ -174,7 +174,7 @@ static int map_init_cache(struct map_cache *cache) {
 
     cache->pg_buf = calloc(MAP_BUF_PGS, sizeof(struct map_cache_entry));
     if (!cache->pg_buf) {
-        log_err("Map cache initialization failed.\n");
+        log_err("map_init_cache: Map cache initialization failed.\n");
         return XZTL_ZTL_MAP_ERR;
     }
 
@@ -201,7 +201,7 @@ static int map_init_cache(struct map_cache *cache) {
 
         cache->pg_buf[pg_i].buf = calloc(1, map_pg_sz);
         if (!cache->pg_buf[pg_i].buf) {
-            log_erra("map_init_cache: pg_buf pg_i[%u] buf is null.\n", pg_i);
+            log_erra("map_init_cache: pg_buf pg_i [%u] buf is null.\n", pg_i);
             goto FREE_PGS;
         }
         
@@ -282,7 +282,7 @@ static int map_init(void) {
 
     for (cache_i = 0; cache_i < MAP_N_CACHES; cache_i++) {
         if (map_init_cache(&map_caches[cache_i])) {
-            log_erra("map_init_cache: cache_i cache_i[%u] buf is null.\n", cache_i);
+            log_erra("map_init_cache: cache_i cache_i [%u] buf is null.\n", cache_i);
             goto EXIT_CACHES;
         }
 
@@ -291,7 +291,7 @@ static int map_init(void) {
 
     cp_running = 0;
 
-    log_info("ztl-map: Global Mapping started.\n");
+    log_info("map_init: Global Mapping started.\n");
 
     return XZTL_OK;
 
@@ -306,7 +306,7 @@ static void map_exit(void) {
 
     free(map_caches);
 
-    log_info("ztl-map: Global Mapping stopped.");
+    log_info("map_exit: Global Mapping stopped.");
 }
 
 static struct map_cache_entry *map_get_cache_entry(uint64_t id) {
@@ -319,11 +319,11 @@ static struct map_cache_entry *map_get_cache_entry(uint64_t id) {
     cache_id = id % MAP_N_CACHES;
     pg_off   = id / map_ent_per_pg;
 
-    ZDEBUG(ZDEBUG_MAP, "ztl-map: get cache. ID: %lu, off %d.", id, pg_off);
+    ZDEBUG(ZDEBUG_MAP, "map_get_cache_entry: get cache. ID: [%lu], off [%d].", id, pg_off);
 
     md_ent = ztl()->mpe->get_fn(pg_off);
     if (!md_ent) {
-        log_erra("ztl-map: Map MD page out of bounds. ID: %lu, off %d", id,
+        log_erra("map_get_cache_entry: Map MD page out of bounds. ID: [%lu], off [%d]\n", id,
                  pg_off);
         return NULL;
     }
@@ -338,9 +338,10 @@ static struct map_cache_entry *map_get_cache_entry(uint64_t id) {
 
         if (map_load_pg_cache(&map_caches[cache_id], md_ent, first_pg_lba,
                               pg_off)) {
+	        log_erra("map_get_cache_entry: Mapping page not loaded cache [%d], pg_off [%d]\n",
+                cache_id, pg_off);
             pthread_mutex_unlock(&ztl()->smap.entry_mutex[pg_off]);
-            log_erra("ztl-map: Mapping page not loaded cache %d, pg_off %d\n",
-                     cache_id, pg_off);
+
             return NULL;
         }
 
@@ -377,12 +378,12 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
 
     ent_off = id % map_ent_per_pg;
     if (ent_off >= map_ent_per_pg) {
-        log_erra("ztl-map: upsert. Entry offset out of bounds. ID %lu, off %d",
+        log_erra("map_upsert. Entry offset out of bounds. ID [%lu], off [%d]\n",
                  id, ent_off);
         return XZTL_ZTL_MAP_ERR;
     }
 
-    ZDEBUG(ZDEBUG_MAP, "ztl-map: upsert. ID: %lu, off %d.", id, ent_off);
+    ZDEBUG(ZDEBUG_MAP, "map_upsert: upsert. ID: [%lu], off [%d].", id, ent_off);
 
     cache_ent = map_get_cache_entry(id);
     if (!cache_ent) {
@@ -398,13 +399,13 @@ static int map_upsert(uint64_t id, uint64_t val, uint64_t *old,
        'old_caller' as 0. GC, for example, sets 'old_caller' with the old
        sector address. If other thread has updated it, keep the current value.*/
     if (old_caller && map_ent->addr != old_caller) {
-        log_erra("map_upsert: map_ent->addr[%p] != old_caller[%p].\n", map_ent->addr, old_caller);
+        log_erra("map_upsert: map_ent->addr [%p] != old_caller [%p].\n", map_ent->addr, old_caller);
         return XZTL_ZTL_MAP_ERR;
     }
 
     xztl_atomic_int64_update(&map_ent->addr, val);
 
-    ZDEBUG(ZDEBUG_MAP, "  upsert succeed: ID: %lu, val: (0x%lx/%d/%d)", id,
+    ZDEBUG(ZDEBUG_MAP, "map_upsert: upsert succeed, ID: [%lu], val: [0x%lx/%d/%d]\n", id,
            (uint64_t)map_ent->g.offset, map_ent->g.nsec, map_ent->g.multi);
 
     return XZTL_OK;
@@ -418,22 +419,22 @@ static uint64_t map_read(uint64_t id) {
 
     ent_off = id % map_ent_per_pg;
     if (ent_off >= map_ent_per_pg) {
-        log_erra("ztl-map: read. Entry offset out of bounds. ID %lu", id);
+        log_erra("ztl-map: read. Entry offset out of bounds. ID [%lu]", id);
         return AND64;
     }
 
-    ZDEBUG(ZDEBUG_MAP, "ztl-map: read. ID: %lu, off %d.", id, ent_off);
+    ZDEBUG(ZDEBUG_MAP, " map_read: ID: [%lu], off [%d].", id, ent_off);
 
     cache_ent = map_get_cache_entry(id);
     if (!cache_ent) {
-        log_err("map_read: cache_ent is NULL ID %lu\n");
+        log_erra("map_read: cache_ent is NULL ID [%lu]\n");
         return AND64;
     }
     map_ent = &((struct app_map_entry *)cache_ent->buf)[ent_off]; // NOLINT
 
     ret = map_ent->g.offset;
 
-    ZDEBUG(ZDEBUG_MAP, "  read succeed: ID: %lu, val (0x%lx/%d/%d)", id,
+    ZDEBUG(ZDEBUG_MAP, "  map_read: ID: [%lu], val [0x%lx/%d/%d]", id,
            (uint64_t)map_ent->g.offset, map_ent->g.nsec, map_ent->g.multi);
 
     return ret;

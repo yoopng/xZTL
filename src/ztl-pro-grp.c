@@ -69,8 +69,8 @@ int ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
 
         if (sec_avlb < actual_sec) {
             log_erra(
-                "ztl-pro-grp: left sector is not enough sec_avlb[%u] "
-                "actual_sec[%u] remain_sec[%d]",
+                "ztl_pro_grp_get: left sector is not enough sec_avlb [%u] "
+                "actual_sec [%u] remain_sec [%d]",
                 sec_avlb, actual_sec, remain_sec);
             goto NO_LEFT;
         }
@@ -88,8 +88,8 @@ int ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
         zone->zmd_entry->wptr_inflight += ctx->nsec[zn_i];
 
         ZDEBUG(ZDEBUG_PRO,
-               "ztl-pro-grp  (get): (%d/%d/0x%lx/0x%lx/0x%lx) "
-               " sp: %d, remain_sec: %d",
+               "ztl_pro_grp_get: [%d/%d/0x%lx/0x%lx/0x%lx] "
+               " sp [%d], remain_sec [%d]",
                zone->addr.g.grp, zone->addr.g.zone, (uint64_t)zone->addr.g.sect,
                zone->zmd_entry->wptr, zone->zmd_entry->wptr_inflight,
                ctx->nsec[zn_i], remain_sec);
@@ -106,7 +106,7 @@ NO_LEFT:
         ctx->nsec[zn_i]      = 0;
     }
 
-    log_erra("ztl-pro (get): No zones left. Group %d", grp->id);
+    log_erra("ztl_pro_grp_get: No zones left. Group [%d]", grp->id);
     return XZTL_ZTL_PROV_GRP_ERR;
 }
 
@@ -123,7 +123,7 @@ void ztl_pro_grp_free(struct app_group *grp, uint32_t zone_i, uint32_t nsec) {
     /* A single thread touches the write pointer, no lock needed */
     zone->zmd_entry->wptr += nsec;
 
-    ZDEBUG(ZDEBUG_PRO, "ztl-pro-grp (free): (%d/%d/0x%lx/0x%lx/0x%lx) ",
+    ZDEBUG(ZDEBUG_PRO, "ztl_pro_grp_free: [%d/%d/0x%lx/0x%lx/0x%lx] ",
            zone->addr.g.grp, zone->addr.g.zone, (uint64_t)zone->addr.g.sect,
            zone->zmd_entry->wptr, zone->zmd_entry->wptr_inflight);
 
@@ -145,7 +145,7 @@ int ztl_pro_grp_node_finish(struct app_group *grp, struct ztl_pro_node *node) {
         ret           = xztl_media_submit_zn(&cmd);
 
         if (ret || cmd.status) {
-            log_erra("ztl-pro: Zone finish failure (%lld). status %d",
+            log_erra("ztl_pro_grp_node_finish: Zone finish failure [%lld] status [%d]\n",
                      zone->addr.g.zone, cmd.status);
             xztl_atomic_int32_update(&node->nr_finish_err,
                                      node->nr_finish_err + 1);
@@ -163,7 +163,7 @@ int ztl_pro_grp_submit_mgmt(struct app_group *grp, struct ztl_pro_node *node,
     struct xztl_mp_entry *mp_cmd;
     mp_cmd = xztl_mempool_get(XZTL_NODE_MGMT_ENTRY, 0);
     if (!mp_cmd) {
-        log_err("ztl-wca: Mempool failed.");
+        log_err("ztl_pro_grp_submit_mgmt: Mempool failed.\n");
         return XZTL_ZTL_PROV_GRP_ERR;
     }
 
@@ -206,7 +206,7 @@ static void *znd_pro_grp_process_mgmt(void *args) {
             }
 
             if (ret) {
-                log_erra("znd_pro_grp_process_mgmt ret[%d]\n", ret);
+                log_erra("znd_pro_grp_process_mgmt: ret [%d]\n", ret);
             }
 
             xztl_mempool_put(et->mp_entry, XZTL_NODE_MGMT_ENTRY, 0);
@@ -246,31 +246,31 @@ int ztl_pro_grp_put_zone(struct app_group *grp, uint32_t zone_i) {
     zmde = zone->zmd_entry;
 
     ZDEBUG(ZDEBUG_PRO,
-           "ztl-pro-grp  (put): (%d/%d/0x%lx/0x%lx) "
-           "pieces %d, deletes: %d",
+           "ztl_pro_grp_put_zone: [%d/%d/0x%lx/0x%lx] "
+           "pieces [%d], deletes: [%d]",
            zone->addr.g.grp, zone->addr.g.zone, (uint64_t)zone->addr.g.sect,
            zone->zmd_entry->wptr, zone->zmd_entry->npieces,
            zone->zmd_entry->ndeletes);
 
     if (!(zmde->flags & XZTL_ZMD_AVLB)) {
-        log_infoa("ztl-pro (put): Cannot PUT an invalid zone (%d/%d)", grp->id,
+        log_infoa("ztl_pro_grp_put_zone: Cannot PUT an invalid zone [%d/%d]", grp->id,
                   zone_i);
         return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (zmde->flags & XZTL_ZMD_RSVD) {
-        log_infoa("ztl-pro (put): Zone is RESERVED (%d/%d)", grp->id, zone_i);
+        log_infoa("ztl_pro_grp_put_zone: Zone is RESERVED [%d/%d", grp->id, zone_i);
         return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (!(zmde->flags & XZTL_ZMD_USED)) {
-        log_infoa("ztl-pro (put): Zone is already EMPTY (%d/%d)", grp->id,
+        log_infoa("ztl_pro_grp_put_zone: Zone is already EMPTY [%d/%d]", grp->id,
                   zone_i);
         return XZTL_ZTL_PROV_GRP_ERR;
     }
 
     if (zmde->flags & XZTL_ZMD_OPEN) {
-        log_infoa("ztl-pro (put): Zone is still OPEN (%d/%d)", grp->id, zone_i);
+        log_infoa("ztl_pro_grp_put_zone: Zone is still OPEN [%d/%d]", grp->id, zone_i);
         return XZTL_ZTL_PROV_GRP_ERR;
     }
 
@@ -305,7 +305,7 @@ int ztl_pro_grp_node_reset(struct app_group *grp, struct ztl_pro_node *node) {
         zone = node->vzones[i];
         ret  = ztl_pro_node_reset_zn(zone);
         if (ret) {
-            log_erra("ztl_pro_grp_node_reset: Zone: %lu reset failure\n", zone->addr.g.zone);
+            log_erra("ztl_pro_grp_node_reset: Zone [%lu] reset failure\n", zone->addr.g.zone);
             xztl_atomic_int32_update(&node->nr_reset_err,
                                      node->nr_reset_err + 1);
             goto ERR;
@@ -330,7 +330,7 @@ int ztl_pro_node_reset_zn(struct ztl_pro_zone *zone) {
     ret           = xztl_media_submit_zn(&cmd);
 
     if (ret || cmd.status) {
-        log_erra("ztl_pro_node_reset_zn: Zone: %lu reset failure. status %d\n",
+        log_erra("ztl_pro_node_reset_zn: Zone: [%lu] reset failure. status [%d]\n",
                  zone->addr.g.zone, cmd.status);
         goto ERR;
     }
@@ -349,7 +349,7 @@ int ztl_pro_grp_reset_all_zones(struct app_group *grp) {
 
     ret = xztl_media_submit_zn(&cmd);
     if (ret || cmd.status) {
-        log_erra("ztl-pro:All zone reset failure. ret %d status %d\n", ret, cmd.status);
+        log_erra("ztl_pro_grp_reset_all_zones: All zone reset failure. ret [%d] status [%d]\n", ret, cmd.status);
     }
     return XZTL_OK;
 }
@@ -418,11 +418,11 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
         zmde = ztl()->zmd->get_fn(grp, zone_i, 0);
 
         if (zmde->addr.g.zone != zone_i || zmde->addr.g.grp != grp->id)
-            log_erra("ztl-pro: zmd entry address does not match (%d/%d)(%d/%d)",
+            log_erra("ztl_pro_grp_node_init: zmd entry address does not match [%d/%d] [%d/%d]",
                      zmde->addr.g.grp, zmde->addr.g.zone, grp->id, zone_i);
 
         if ((zmde->flags & XZTL_ZMD_RSVD) || !(zmde->flags & XZTL_ZMD_AVLB)) {
-            log_infoa("flags: %x\n", zmde->flags);
+            log_infoa("ztl_pro_grp_node_init: flags [%x]\n", zmde->flags);
             continue;
         }
 
@@ -440,8 +440,8 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
                 if ((zmde->flags & XZTL_ZMD_USED) ||
                     (zmde->flags & XZTL_ZMD_OPEN)) {
                     log_erra(
-                        "ztl-pro: device reported EMPTY zone, but ZMD flag"
-                        " does not match (%d/%d)(%x)",
+                        "ztl_pro_grp_node_init: device reported EMPTY zone, but ZMD flag"
+                        " does not match [%d/%d] [%x]",
                         grp->id, zone_i, zmde->flags);
                     continue;
                 }
@@ -453,7 +453,7 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
                     pro->vnodes[node_i].status = XZTL_ZMD_NODE_FREE;
                 }
 
-                ZDEBUG(ZDEBUG_PRO_GRP, " ZINFO: (%d/%d) empty\n",
+                ZDEBUG(ZDEBUG_PRO_GRP, " ztl_pro_grp_node_init: [%d/%d] empty\n",
                        zmde->addr.g.grp, zmde->addr.g.zone);
                 break;
             case XNVME_SPEC_ZND_STATE_EOPEN:
@@ -462,12 +462,12 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
             case XNVME_SPEC_ZND_STATE_FULL:
                 pro->vnodes[node_i].status = XZTL_ZMD_NODE_USED;
                 ZDEBUG(ZDEBUG_PRO_GRP,
-                       " ZINFO NOT CORRECT : (%d/%d) , status : %d\n",
+                       " ztl_pro_grp_node_init: ZINFO NOT CORRECT [%d/%d] , status [%d]\n",
                        zmde->addr.g.grp, zmde->addr.g.zone, zinfo->zs);
                 break;
 
             default:
-                log_infoa("ztl-pro: Unknown zone condition. zone %d, zs: %d",
+                log_infoa("ztl_pro_grp_node_init: Unknown zone condition. zone [%d], zs [%d]",
                           grp->id * core->media->geo.zn_grp + zone_i,
                           zinfo->zs);
         }
@@ -484,7 +484,7 @@ int ztl_pro_grp_node_init(struct app_group *grp) {
 
     pthread_create(&mthread.comp_tid, NULL, znd_pro_grp_process_mgmt, NULL);
 
-    log_infoa("ztl-pro: Started. Group %d.", grp->id);
+    log_infoa("ztl_pro_grp_node_init: Started. Group [%d].", grp->id);
     return XZTL_OK;
 }
 
@@ -497,5 +497,5 @@ void ztl_pro_grp_exit(struct app_group *grp) {
     ztl_pro_grp_zones_free(grp);
     free(grp->pro);
 
-    log_infoa("ztl-pro: Stopped. Group %d.", grp->id);
+    log_infoa("ztl_pro_grp_exit: Stopped. Group [%d].", grp->id);
 }

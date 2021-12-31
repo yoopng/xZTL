@@ -271,19 +271,19 @@ int xztl_prometheus_init(void) {
     ret = xztl_mempool_create(XZTL_PROMETHEUS_LAT, 0, MAX_LATENCY_ENTS,
                               sizeof(struct latency_entry), NULL, NULL);
     if (ret) {
-        log_err("xztl-prometheus: Latency memory pool not started.");
+        log_err("xztl_prometheus_init: Latency memory pool not started.");
         goto SPIN;
     }
 
     xztl_flush_l_running = 0;
     if (pthread_create(&latency_tid, NULL, xztl_prometheus_latency_th, NULL)) {
-        log_err("xztl-prometheus: Flushing latency thread not started.");
+        log_err("xztl_prometheus_init: Flushing latency thread not started.");
         goto MP;
     }
 
     xztl_flush_running = 0;
     if (pthread_create(&th_flush, NULL, xztl_prometheus_flush, NULL)) {
-        log_err("xztl-prometheus: Flushing thread not started.");
+        log_err("xztl_prometheus_init: Flushing thread not started.");
         goto LAT_TH;
     }
 

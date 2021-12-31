@@ -45,11 +45,11 @@ struct app_pro_addr *ztl_pro_new(uint32_t nsec, int32_t *node_id) {
     struct app_group *    grp;
     int                   ret;
 
-    ZDEBUG(ZDEBUG_PRO, "ztl-pro  (new): nsec %d, node_id %d", nsec, *node_id);
+    ZDEBUG(ZDEBUG_PRO, "ztl_pro_new: nsec [%d], node_id [%d]", nsec, *node_id);
 
     mpe = xztl_mempool_get(XZTL_ZTL_PRO_CTX, 0);
     if (!mpe) {
-        log_erra("ztl-pro: mempool is empty. node_id %d\n", *node_id);
+        log_erra("ztl_pro_new: mempool is empty. node_id [%d]\n", *node_id);
         return NULL;
     }
 
@@ -60,7 +60,7 @@ struct app_pro_addr *ztl_pro_new(uint32_t nsec, int32_t *node_id) {
 
     ret = ztl_pro_grp_get(grp, ctx, nsec, node_id, NULL);
     if (ret) {
-        log_erra("ztl-pro: Get group zone failed. node_id %d\n", *node_id);
+        log_erra("ztl_pro_new: Get group zone failed. node_id [%d]\n", *node_id);
         xztl_mempool_put(mpe, XZTL_ZTL_PRO_CTX, 0);
         return NULL;
     }
@@ -95,7 +95,7 @@ void ztl_pro_exit(void) {
 
     ret = ztl()->groups.get_list_fn(glist, app_ngrps);
     if (ret != app_ngrps)
-        log_erra("ztl-pro (exit): Groups mismatch (%d,%d).", ret, app_ngrps);
+        log_erra("ztl_pro_exit: Groups mismatch [%d,%d].", ret, app_ngrps);
 
     while (ret) {
         ret--;
@@ -110,7 +110,7 @@ static int ztl_mempool_init(void) {
     int ret = xztl_mempool_create(XZTL_ZTL_PRO_CTX, 0, ZTL_PRO_MP_SZ,
                                   sizeof(struct app_pro_addr), NULL, NULL);
     if (ret) {
-        log_erra("ztl_mempool_init: xztl_mempool_create failed ret(%d).", ret);
+        log_erra("ztl_mempool_init: xztl_mempool_create failed ret [%d].", ret);
         return ret;
     }
     return XZTL_OK;
@@ -135,20 +135,20 @@ int ztl_pro_init(void) {
 
     ret = ztl()->groups.get_list_fn(glist, app_ngrps);
     if (ret != app_ngrps) {
-        log_erra("ztl_pro_init: get_list_fn ret[%d] app_ngrps[%d]failed.\n", ret, app_ngrps);
+        log_erra("ztl_pro_init: get_list_fn ret [%d] app_ngrps [%d] failed\n", ret, app_ngrps);
         goto MP;
     }
     if (ztl_metadata_init(glist[0]))
         goto EXIT;
     for (grp_i = 0; grp_i < app_ngrps; grp_i++) {
         if (ztl_pro_grp_node_init(glist[grp_i])) {
-            log_erra("ztl_pro_init: ztl_pro_grp_node_init failed grp_i[%d] \n", grp_i);
+            log_erra("ztl_pro_init: ztl_pro_grp_node_init failed grp_i [%d]\n", grp_i);
             goto EXIT;
         }
     }
 
     memset(cur_grp, 0x0, sizeof(uint16_t) * ZTL_PRO_TYPES);
-    log_info("ztl-pro: Global provisioning started.");
+    log_info("ztl_pro_init: Global provisioning started.");
 
     return XZTL_OK;
 

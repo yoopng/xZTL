@@ -62,7 +62,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
 
     if (mcmd->status) {
-        log_erra("ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d\n",
+        log_erra("zrocks_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
                ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                ucmd->moffset[mcmd->sequence], mcmd->status);
     }
@@ -159,7 +159,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
 
     if (mcmd->status)
-        log_erra("ztl-wca: Callback. (ID %lu, S %d/%d, C %d, WOFF 0x%lx). St: %d\n",
+        log_erra("ztl_wca_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
                ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                ucmd->moffset[mcmd->sequence], mcmd->status);
 
@@ -202,12 +202,12 @@ static uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
     if (!node) {
         cnt = ztl_thd_allocNode_for_thd(tdinfo);
         if (cnt == 0) {
-            log_err("No available node resource.\n");
+            log_err("ztl_thd_getNodeId: No available node resource.\n");
             return XZTL_ZTL_WCA_ERR;
         } else {
             node = STAILQ_FIRST(&tdinfo->free_head);
             if (!node) {
-                log_err("Invalid node.\n");
+                log_err("ztl_thd_getNodeId: Invalid node.\n");
                 return XZTL_ZTL_WCA_ERR;
             }
         }
@@ -240,7 +240,7 @@ static int ztl_thd_submit(struct xztl_io_ucmd *ucmd) {
         }
 
     } else {
-        log_erra("No available node resource.\n");
+        log_err("ztl_thd_submit: No available node resource.\n");
     }
 
     return ret;
@@ -321,7 +321,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
        read_num);*/
 
     if (ZROCKS_DEBUG)
-        log_infoa("zrocks (__read): sec_size %lu\n", sec_size);
+        log_infoa("ztl_wca_read_ucmd: sec_size [%lu]\n", sec_size);
 
     sec_left  = sec_size;
     bytes_off = 0;
@@ -396,7 +396,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
 
             ret = xztl_media_submit_io(ucmd->mcmd[cmd_i]);
             if (ret) {
-                log_erra("__zrocks_read err %d\r\n", ret);
+                log_erra("ztl_wca_read_ucmd: xztl_media_submit_io err [%d]\n", ret);
                 goto FAIL_SUBMIT;
             }
 
@@ -407,7 +407,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
 
     int err = xnvme_queue_wait(tctx->queue);
     if (err < 0) {
-        log_erra("xnvme_queue_wait() returns error %d\r\n", err);
+        log_erra("ztl_wca_read_ucmd: xnvme_queue_wait() returns error [%d]\n", err);
     }
     ucmd->completed = 1;
     return ret;
@@ -416,7 +416,7 @@ FAIL_SUBMIT:
     if (submitted) {
         int err = xnvme_queue_wait(tctx->queue);
         if (err < 0) {
-            log_erra("xnvme_queue_wait() returns error %d\r\n", err);
+            log_erra("ztl_wca_read_ucmd: xnvme_queue_wait() returns error [%d]\n", err);
         }
         ucmd->completed = 1;
     }
@@ -438,13 +438,13 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
     struct xztl_thread *     tdinfo = ucmd->xd.tdinfo;
     struct xztl_mthread_ctx *tctx   = tdinfo->tctx;
 
-    ZDEBUG(ZDEBUG_WCA, "ztl-wca: Processing user write. ID %lu", ucmd->id);
+    ZDEBUG(ZDEBUG_WCA, "ztl_wca_write_ucmd: Processing user write. ID [%lu]", ucmd->id);
 
     nsec = ucmd->size / core->media->geo.nbytes;
 
     /* We do not support non-aligned buffers */
     if (ucmd->size % (core->media->geo.nbytes * ZTL_WCA_SEC_MCMD_MIN) != 0) {
-        log_erra("ztl-wca: Buffer is not aligned to %d bytes: %lu bytes.",
+        log_erra("ztl_wca_write_ucmd: Buffer is not aligned to [%d] bytes [%lu] bytes.",
                  core->media->geo.nbytes * ZTL_WCA_SEC_MCMD_MIN, ucmd->size);
         goto FAILURE;
     }
@@ -456,15 +456,15 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
 
     if (ncmd > XZTL_IO_MAX_MCMD) {
         log_erra(
-            "ztl-wca: User command exceed XZTL_IO_MAX_MCMD. "
-            "%d of %d",
+            "ztl_wca_write_ucmd: User command exceed XZTL_IO_MAX_MCMD. "
+            "[%d] of [%d]",
             ncmd, XZTL_IO_MAX_MCMD);
         goto FAILURE;
     }
 
     prov = tdinfo->prov;
     if (!prov) {
-        log_erra("ztl-wca: Provisioning failed. nsec %d, node_id %d", nsec,
+        log_erra("ztl_wca_write_ucmd: Provisioning failed. nsec [%d], node_id [%d]", nsec,
                  *node_id);
         goto FAILURE;
     }
@@ -474,8 +474,8 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
     ncmd = ztl_wca_ncmd_prov_based(prov);
     if (ncmd > XZTL_IO_MAX_MCMD) {
         log_erra(
-            "ztl-wca: User command exceed XZTL_IO_MAX_MCMD. "
-            "%d of %d",
+            "ztl_wca_write_ucmd: User command exceed XZTL_IO_MAX_MCMD. "
+            "[%d] of [%d]",
             ncmd, XZTL_IO_MAX_MCMD);
         goto FAIL_NCMD;
     }
@@ -487,7 +487,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
 
     boff = (uint64_t)ucmd->buf;
 
-    ZDEBUG(ZDEBUG_WCA, "ztl-wca: NMCMD: %d", ncmd);
+    ZDEBUG(ZDEBUG_WCA, "ztl_wca_write_ucmd: NMCMD [%d]", ncmd);
 
     /* Populate media commands */
     cmd_i = 0;
@@ -541,7 +541,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
         }
     }
 
-    ZDEBUG(ZDEBUG_WCA, "ztl-wca: Populated: %d", cmd_i);
+    ZDEBUG(ZDEBUG_WCA, "ztl_wca_write_ucmd: Populated: %d", cmd_i);
 
     /* Submit media commands */
     for (cmd_i = 0; cmd_i < ZTL_PRO_STRIPE * 2; cmd_i++)
@@ -590,7 +590,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
         ztl_wca_poke_ctx(tctx);
     }
 
-    ZDEBUG(ZDEBUG_WCA, "  Submitted: %d", submitted);
+    ZDEBUG(ZDEBUG_WCA, " ztl_wca_write_ucmd: Submitted [%d]", submitted);
 
     return XZTL_OK;
 
@@ -655,7 +655,7 @@ static int _ztl_thd_init(struct xztl_thread *td) {
 
     td->prov = zrocks_alloc(sizeof(struct app_pro_addr));
     if (!td->prov) {
-        log_err("Thread resource (data buffer) allocation error.");
+        log_err("_ztl_thd_init: Thread resource (data buffer) allocation error.");
         return XZTL_ZTL_WCA_ERR;
     }
 
@@ -664,7 +664,7 @@ static int _ztl_thd_init(struct xztl_thread *td) {
 
     td->tctx = xztl_ctx_media_init(XZTL_CTX_NVME_DEPTH);
     if (!td->tctx) {
-        log_err("Thread resource (tctx) allocation error.");
+        log_err("_ztl_thd_init: Thread resource (tctx) allocation error.");
         return XZTL_ZTL_WCA_ERR;
     }
 
@@ -684,7 +684,7 @@ static int ztl_thd_init(void) {
         if (!ret) {
             THREAD_NUM++;
         } else {
-            log_erra("ztl-thd: thread (%d) created failed.", tid);
+            log_erra("ztl_thd_init: thread [%d] created failed.", tid);
             break;
         }
     }
@@ -712,7 +712,7 @@ static void ztl_thd_exit(void) {
         pthread_join(td->wca_thread, NULL);
     }
 
-    log_info("ztl-thd stopped.\n");
+    log_info("ztl_thd_exit: ztl-thd stopped.\n");
 }
 
 static struct app_wca_mod libztl_wca = {.mod_id      = LIBZTL_WCA,

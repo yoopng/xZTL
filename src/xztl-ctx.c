@@ -55,7 +55,7 @@ struct xztl_mthread_ctx *xztl_ctx_media_init(uint32_t depth) {
 
     ret = xztl_media_submit_misc(&cmd);
     if (ret || !tctx->queue) {
-        log_erra("xztl_ctx_media_init: xztl_media_submit_misc ret [%d]  tctx->queue[%p]\n", ret, tctx->queue);
+        log_erra("xztl_ctx_media_init: xztl_media_submit_misc ret [%d] tctx->queue [%p]\n", ret, tctx->queue);
         pthread_spin_destroy(&tctx->qpair_spin);
         free(tctx);
         return NULL;
@@ -82,7 +82,7 @@ int xztl_ctx_media_exit(struct xztl_mthread_ctx *tctx) {
 
     ret = xztl_media_submit_misc(&cmd);
     if (ret) {
-        log_erra("xztl_ctx_media_exit: xztl_media_submit_misc ret [%d] \n", ret);
+        log_erra("xztl_ctx_media_exit: xztl_media_submit_misc ret [%d]\n", ret);
         return XZTL_MP_ASYNCH_ERR;
     }
     pthread_spin_destroy(&tctx->qpair_spin);
@@ -100,7 +100,7 @@ int xztl_init_thread_ctxs() {
         struct xztl_mthread_ctx *ctxTemp = NULL;
         ctxTemp = xztl_ctx_media_init(XZTL_CTX_NVME_DEPTH);
         if (ctxTemp == NULL) {
-            log_erra("xztl_init_thread_ctxs init ctx %d failed\n", i);
+            log_erra("xztl_init_thread_ctxs: init ctx [%d] failed\n", i);
             return XZTL_MEM;
         }
 
@@ -114,7 +114,7 @@ int xztl_exit_thread_ctxs() {
     for (int i = 0; i < XZTL_THREAD_CTX_NUM; i++) {
         int ret = xztl_ctx_media_exit(xzt_ctxs[i]);
         if (ret) {
-            log_erra("xztl_exit_thread_ctxs free ctx %d ret %d failed\n", i, ret);
+            log_erra("xztl_exit_thread_ctxs: free ctx [%d] ret [%d] failed\n", i, ret);
         }
     }
     pthread_spin_unlock(&ctxs_spin);

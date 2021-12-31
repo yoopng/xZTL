@@ -68,7 +68,7 @@ static int ztl_zmd_load_report(struct app_group *grp) {
     }
 
     if (ret) {
-        log_erra("zmd err report: %d", cmd.status);
+        log_erra("ztl_zmd_load_report: zmd err status [%d]\n", cmd.status);
     }
 
     return ret;
