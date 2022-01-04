@@ -92,6 +92,7 @@
 #define METADATA_HEAD_MAGIC 0x4c
 
 #define AND64 0xffffffffffffffff
+#define MAX_CALLBACK_ERR_CNT 3
 
 typedef int(xztl_init_fn)(void);
 typedef int(xztl_exit_fn)(void);
@@ -137,6 +138,7 @@ struct xztl_io_ucmd {
     uint16_t prov_type;
     uint8_t  app_md; /* Application is responsible for mapping/recovery */
     uint8_t  status;
+    uint8_t  callback_err_cnt;
 
     xztl_callback *callback;
 
@@ -179,8 +181,8 @@ enum xztl_status {
     XZTL_MCTX_MP_ERR    = 0x0d,
     XZTL_ZTL_PROV_ERR   = 0x0e,
     XZTL_ZTL_GROUP_ERR  = 0x0f,
-	XZTL_ZTL_PROV_GRP_ERR = 0x10,
-	XZTL_ZTL_MOD_ERR    = 0x11,
+    XZTL_ZTL_PROV_GRP_ERR = 0x10,
+    XZTL_ZTL_MOD_ERR    = 0x11,
     XZTL_ZTL_ZMD_REP    = 0x12,
     XZTL_ZTL_PROV_FULL  = 0x13,
     XZTL_ZTL_MPE_ERR    = 0x14,
@@ -190,15 +192,15 @@ enum xztl_status {
     XZTL_ZTL_WCA_S_ERR  = 0x18,
     XZTL_ZTL_WCA_S2_ERR = 0x19,
     XZTL_ZTL_MD_INIT_ERR = 0x1a,
-	XZTL_ZTL_MD_READ_ERR = 0x1b,
-	XZTL_ZTL_MD_WRITE_ERR = 0x1c,
-	XZTL_ZTL_MD_RESET_ERR = 0x1d,
-	XZTL_ZTL_STATS_ERR    = 0x1e,
-	XZTL_ZTL_PROMETHEUS_ERR   = 0x1f,
+    XZTL_ZTL_MD_READ_ERR = 0x1b,
+    XZTL_ZTL_MD_WRITE_ERR = 0x1c,
+    XZTL_ZTL_MD_RESET_ERR = 0x1d,
+    XZTL_ZTL_STATS_ERR    = 0x1e,
+    XZTL_ZTL_PROMETHEUS_ERR   = 0x1f,
     XZTL_MEDIA_ERROR    = 0x100,
     XZTL_ZROCKS_INIT_ERR = 0x101,
     XZTL_ZROCKS_WRITE_ERR = 0x102,
-	XZTL_ZROCKS_READ_ERR = 0X103
+    XZTL_ZROCKS_READ_ERR = 0X103
 }
 
 enum xztl_stats_io_types {

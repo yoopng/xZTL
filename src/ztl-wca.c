@@ -50,6 +50,21 @@ static void zrocks_read_callback_mcmd(void *arg) {
     ucmd = (struct xztl_io_ucmd *)mcmd->opaque;
 
     if (mcmd->status) {
+        log_erra("zrocks_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
+           ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
+           ucmd->moffset[mcmd->sequence], mcmd->status);
+
+        ucmd->callback_err_cnt++;
+        if (ucmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
+            int ret = xztl_media_submit_io(mcmd);
+            if (ret) {
+                log_erra("zrocks_read_callback_mcmd: xztl_media_submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
+                           ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
+                           ucmd->moffset[mcmd->sequence], ret);
+            }
+            return;
+        }
+
         ucmd->status = mcmd->status;
     } else {
         /* If I/O succeeded, we copy the data from the correct offset to the
@@ -60,13 +75,6 @@ static void zrocks_read_callback_mcmd(void *arg) {
     }
 
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
-
-    if (mcmd->status) {
-        log_erra("zrocks_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
-               ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
-               ucmd->moffset[mcmd->sequence], mcmd->status);
-    }
-
     if (ucmd->ncb == ucmd->nmcmd) {
         ucmd->completed = 1;
     }
@@ -397,7 +405,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
             ret = xztl_media_submit_io(ucmd->mcmd[cmd_i]);
             if (ret) {
                 log_erra("ztl_wca_read_ucmd: xztl_media_submit_io err [%d]\n", ret);
-                goto FAIL_SUBMIT;
+                continue;
             }
 
             ucmd->mcmd[cmd_i]->submitted = 1;
@@ -410,17 +418,6 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
         log_erra("ztl_wca_read_ucmd: xnvme_queue_wait() returns error [%d]\n", err);
     }
     ucmd->completed = 1;
-    return ret;
-
-FAIL_SUBMIT:
-    if (submitted) {
-        int err = xnvme_queue_wait(tctx->queue);
-        if (err < 0) {
-            log_erra("ztl_wca_read_ucmd: xnvme_queue_wait() returns error [%d]\n", err);
-        }
-        ucmd->completed = 1;
-    }
-
     return ret;
 }
 
