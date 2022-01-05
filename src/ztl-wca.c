@@ -54,11 +54,11 @@ static void zrocks_read_callback_mcmd(void *arg) {
            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
            ucmd->moffset[mcmd->sequence], mcmd->status);
 
-        ucmd->callback_err_cnt++;
-        if (ucmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
+        mcmd->callback_err_cnt++;
+        if (mcmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
             int ret = xztl_media_submit_io(mcmd);
             if (ret) {
-                log_erra("zrocks_read_callback_mcmd: xztl_media_submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
+                log_erra("zrocks_read_callback_mcmd: submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
                            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                            ucmd->moffset[mcmd->sequence], ret);
             }
@@ -159,18 +159,25 @@ static void ztl_wca_callback_mcmd(void *arg) {
     ucmd->minflight[mcmd->sequence_zn] = 0;
 
     if (mcmd->status) {
+        log_erra("ztl_wca_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
+            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
+            ucmd->moffset[mcmd->sequence], mcmd->status);
+        mcmd->callback_err_cnt++;
+        if (mcmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
+            int ret = xztl_media_submit_io(mcmd);
+            if (ret) {
+                log_erra("ztl_wca_callback_mcmd: submit ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
+                           ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
+                           ucmd->moffset[mcmd->sequence], ret);
+            }
+            return;
+        }
         ucmd->status = mcmd->status;
     } else {
         ucmd->moffset[mcmd->sequence] = mcmd->paddr[0];
     }
 
     xztl_atomic_int16_update(&ucmd->ncb, ucmd->ncb + 1);
-
-    if (mcmd->status)
-        log_erra("ztl_wca_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
-               ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
-               ucmd->moffset[mcmd->sequence], mcmd->status);
-
 
     if (ucmd->ncb == ucmd->nmcmd) {
         ucmd->completed = 1;
@@ -345,7 +352,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
         mcmd->async_ctx    = tctx;
         mcmd->addr[0].addr = 0;
         mcmd->nsec[0]      = read_num;
-
+        mcmd->callback_err_cnt = 0;
         sec_left -= mcmd->nsec[0];
         mcmd->prp[0] = tdinfo->prp[total_cmd];
 
@@ -510,6 +517,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
             mcmd->sequence_zn = zn_i;
             mcmd->naddr       = 1;
             mcmd->status      = 0;
+            mcmd->callback_err_cnt = 0;
             mcmd->nsec[0] =
                 (nsec_zn >= ZTL_WCA_SEC_MCMD) ? ZTL_WCA_SEC_MCMD : nsec_zn;
 

@@ -29,8 +29,8 @@
 #define XZTL_WRITE_APPEND 0
 
 /* Number of maximum addresses in a single command vector.
- * 	A single address is needed for zone append. We should
- * 	increase this number in case of possible vectored I/Os. */
+ *     A single address is needed for zone append. We should
+ *     increase this number in case of possible vectored I/Os. */
 #define XZTL_MAX_MADDR 1
 
 #define XZTL_MCTX_SZ 640
@@ -93,6 +93,7 @@ struct xztl_io_mcmd {
     uint8_t                  opcode;
     uint8_t                  submitted;
     uint8_t                  synch;
+    uint8_t                  callback_err_cnt;
     uint32_t                 sequence;
     uint32_t                 sequence_zn;
     uint64_t                 buf_off;

@@ -35,6 +35,7 @@
 #define ZROCKS_MAX_READ_SZ (256 * ZNS_ALIGMENT) /* 512 KB */
 
 extern struct znd_media zndmedia;
+#define ZROCKS_READ_MAX_RETRY 3
 
 /* Remove this lock if we find a way to get a thread ID starting from 0 */
 static pthread_spinlock_t zrocks_mp_spin;
@@ -74,7 +75,6 @@ static int __zrocks_write(struct xztl_io_ucmd *ucmd, uint64_t id, void *buf,
     ucmd->prov       = NULL;
     ucmd->xd.node_id = *node_id;
     ucmd->xd.tid     = tid;
-
     ret = ztl()->wca->submit_fn(ucmd);
     if (ret) {
         log_erra("__zrocks_write: ID %lu, node_id [%d], size [%lu], new size [%lu], "
@@ -170,8 +170,6 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
     ucmd.callback  = NULL;
     ucmd.prov      = NULL;
     ucmd.completed = 0;
-    ucmd.callback_err_cnt = 0;
-
     ucmd.xd.node_id = node_id;
     ucmd.xd.tid     = tid;
     if (ZROCKS_DEBUG)
@@ -185,7 +183,7 @@ READ_FAIL:
         log_erra("zrocks_read: submit_fn failed. node [%d] off [%lu], sz [%lu] ret [%d] status[%d]\n",
                  node_id, offset, size, ret, ucmd.status);
         retry++;
-        if (retry < 3) {
+        if (retry < ZROCKS_READ_MAX_RETRY) {
             goto READ_FAIL;
         }
         return XZTL_ZROCKS_READ_ERR;

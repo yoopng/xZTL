@@ -31,6 +31,9 @@
 static struct znd_media *  _zndmedia;
 static struct ztl_metadata metadata;
 
+#define META_READ_MAX_RETRY 3
+#define META_WRITE_MAX_RETRY 3
+
 uint64_t zrocks_get_metadata_slba() {
     return XZTL_OK;
 }
@@ -139,9 +142,18 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
         cmd.prp[0]         = (uint64_t)mp_entry->opaque;
         cmd.addr[0].g.sect = slba;
         cmd.status         = 0;
-        ret                = xztl_media_submit_io(&cmd);
+        int retry = 0;
+
+META_READ_FAIL:
+        ret = xztl_media_submit_io(&cmd);
         if (ret) {
             log_erra("zrocks_read_metadata error: [%d]\n", ret);
+
+            retry++;
+            if (retry < META_READ_MAX_RETRY) {
+                goto META_READ_FAIL;
+            }
+
             xztl_mempool_put(mp_entry, ZROCKS_MEMORY, 0);
             return XZTL_ZTL_MD_READ_ERR;
         }
@@ -200,6 +212,9 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
     while (remain_len > 0) {
         write_len = (remain_len > max_len) ? max_len : remain_len;
         nlb       = write_len / core->media->geo.nbytes;
+        int retry = 0;
+
+META_WRITE_FAIL:
         err = xnvme_nvm_write(&xnvme_ctx, xnvme_dev_get_nsid(_zndmedia->dev),
                               metadata.file_slba, nlb - 1, data, NULL);
 
@@ -207,18 +222,24 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
             xnvmec_perr("xnvme_nvm_write()", err);
             xnvme_cmd_ctx_pr(&xnvme_ctx, XNVME_PR_DEF);
             err = err ? err : -XZTL_ZTL_MD_ERR;
+            retry++;
+            if (retry < META_WRITE_MAX_RETRY) {
+                goto META_WRITE_FAIL;
+            }
+
             break;
         }
+    
         metadata.file_slba += nlb;
         data += write_len;
         remain_len -= write_len;
     }
 
     pthread_mutex_unlock(&metadata.page_spin);
-    if (ret) {
+    if (err) {
         log_erra("zrocks_write_file_metadata. file_slb [%lu] sec [%u] err [%d]\n", metadata.file_slba, nlb, err);
         return XZTL_ZTL_MD_WRITE_ERR;
     }
-    
+
     return XZTL_OK;
 }
