@@ -147,6 +147,7 @@ int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
 META_READ_FAIL:
         ret = xztl_media_submit_io(&cmd);
         if (ret) {
+            xztl_stats_inc(XZTL_STATS_META_READ_FAIL, 1);
             log_erra("zrocks_read_metadata error: [%d]\n", ret);
 
             retry++;
@@ -222,6 +223,7 @@ META_WRITE_FAIL:
             xnvmec_perr("xnvme_nvm_write()", err);
             xnvme_cmd_ctx_pr(&xnvme_ctx, XNVME_PR_DEF);
             err = err ? err : -XZTL_ZTL_MD_ERR;
+            xztl_stats_inc(XZTL_STATS_META_WRITE_FAIL, 1);
             retry++;
             if (retry < META_WRITE_MAX_RETRY) {
                 goto META_WRITE_FAIL;

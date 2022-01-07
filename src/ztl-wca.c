@@ -50,6 +50,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
     ucmd = (struct xztl_io_ucmd *)mcmd->opaque;
 
     if (mcmd->status) {
+        xztl_stats_inc(XZTL_STATS_READ_CALLBACK_FAIL, 1);
         log_erra("zrocks_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
            ucmd->moffset[mcmd->sequence], mcmd->status);
@@ -58,6 +59,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
         if (mcmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
             int ret = xztl_media_submit_io(mcmd);
             if (ret) {
+                xztl_stats_inc(XZTL_STATS_READ_SUBMIT_FAIL, 1);
                 log_erra("zrocks_read_callback_mcmd: submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
                            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                            ucmd->moffset[mcmd->sequence], ret);
@@ -159,6 +161,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
     ucmd->minflight[mcmd->sequence_zn] = 0;
 
     if (mcmd->status) {
+        xztl_stats_inc(XZTL_STATS_WRITE_CALLBACK_FAIL, 1);
         log_erra("ztl_wca_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
             ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
             ucmd->moffset[mcmd->sequence], mcmd->status);
@@ -166,6 +169,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
         if (mcmd->callback_err_cnt < MAX_CALLBACK_ERR_CNT) {
             int ret = xztl_media_submit_io(mcmd);
             if (ret) {
+                xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
                 log_erra("ztl_wca_callback_mcmd: submit ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
                            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                            ucmd->moffset[mcmd->sequence], ret);
@@ -411,6 +415,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
 
             ret = xztl_media_submit_io(ucmd->mcmd[cmd_i]);
             if (ret) {
+                xztl_stats_inc(XZTL_STATS_READ_SUBMIT_FAIL, 1);
                 log_erra("ztl_wca_read_ucmd: xztl_media_submit_io err [%d]\n", ret);
                 continue;
             }
@@ -575,6 +580,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
 
             ret = xztl_media_submit_io(ucmd->mcmd[zn_cmd_id[zn_i][index]]);
             if (ret) {
+                xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
                 ztl_wca_poke_ctx(tctx);
                 zn_i--;
                 continue;

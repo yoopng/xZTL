@@ -28,6 +28,8 @@
 
 struct xztl_mthread_info mthread;
 
+#define MGMT_MAX_RETRY 3
+
 struct xnvme_node_mgmt_entry {
     struct app_group *    grp;
     struct ztl_pro_node * node;
@@ -198,7 +200,8 @@ static void *znd_pro_grp_process_mgmt(void *args) {
 
             STAILQ_REMOVE_HEAD(&submit_head, entry);
             pthread_spin_unlock(&xnvme_mgmt_spin);
-
+            int retry = 0;
+    MGMT_FAIL:
             if (et->op_code == ZTL_MGMG_FULL_ZONE) {
                 ret = ztl_pro_grp_node_finish(et->grp, et->node);
             } else {
@@ -206,7 +209,12 @@ static void *znd_pro_grp_process_mgmt(void *args) {
             }
 
             if (ret) {
+                xztl_stats_inc(XZTL_STATS_MGMT_FAIL, 1);
                 log_erra("znd_pro_grp_process_mgmt: ret [%d]\n", ret);
+                retry++;
+                if (retry < MGMT_MAX_RETRY) {
+                    goto MGMT_FAIL;
+                }
             }
 
             xztl_mempool_put(et->mp_entry, XZTL_NODE_MGMT_ENTRY, 0);

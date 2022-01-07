@@ -23,13 +23,23 @@
 #include <string.h>
 #include <xztl.h>
 
-#define XZTL_STATS_IO_TYPES 11
+#define XZTL_STATS_IO_TYPES 18
 
 struct xztl_stats_data {
     uint64_t io[XZTL_STATS_IO_TYPES];
 };
 
 static struct xztl_stats_data xztl_stats;
+
+void xztl_stats_print_err(void) {
+    log_infoa("write submit failed times [%lu]\n", xztl_stats.io[XZTL_STATS_WRITE_SUBMIT_FAIL]);
+    log_infoa("read submit failed times [%lu]\n", xztl_stats.io[XZTL_STATS_READ_SUBMIT_FAIL]);
+    log_infoa("write callback failed times [%lu]\n", xztl_stats.io[XZTL_STATS_WRITE_CALLBACK_FAIL]);
+    log_infoa("read callback failed times [%lu]\n", xztl_stats.io[XZTL_STATS_READ_CALLBACK_FAIL]);
+    log_infoa("mgmt failed times [%lu]\n", xztl_stats.io[XZTL_STATS_MGMT_FAIL]);
+    log_infoa("write meta failed times [%lu]\n", xztl_stats.io[XZTL_STATS_META_WRITE_FAIL]);
+    log_infoa("read meta failed times [%lu]\n", xztl_stats.io[XZTL_STATS_META_READ_FAIL]);
+}
 
 void xztl_stats_print_io(void) {
     uint64_t tot_b, tot_b_w, tot_b_r;
@@ -160,6 +170,8 @@ void xztl_stats_reset_io(void) {
 }
 
 void xztl_stats_exit(void) {
+    xztl_stats_print_err();
+
 #if XZTL_PROMETHEUS
     xztl_prometheus_exit();
 #endif
