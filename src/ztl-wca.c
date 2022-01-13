@@ -185,6 +185,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
 
     if (ucmd->ncb == ucmd->nmcmd) {
         ucmd->completed = 1;
+		ztl()->pro->free_fn(ucmd->prov);
     }
 }
 
@@ -457,6 +458,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
     int      zn_cmd_id_num[ZTL_PRO_STRIPE * 2]   = {0};
     uint64_t boff;
     int      ret, ncmd_zn, zncmd_i;
+	int ret = 0;
 
     struct xztl_thread *     tdinfo = ucmd->xd.tdinfo;
     struct xztl_mthread_ctx *tctx   = tdinfo->tctx;
@@ -491,7 +493,10 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
                  node_id);
         goto FAILURE;
     }
-    ztl_pro_grp_get(glist[0], prov, nsec, node_id, tdinfo);
+
+	ret = ztl()->pro->new_fn(nsec, node_id, prov, tdinfo);
+	if (ret)
+		goto FAILURE;
 
     /* We check the number of commands again based on the provisioning */
     ncmd = ztl_wca_ncmd_prov_based(prov);
@@ -725,14 +730,15 @@ static void ztl_thd_exit(void) {
     for (tid = 0; tid < ZTL_TH_NUM; tid++) {
         td              = &xtd[tid];
         td->wca_running = 0;
-        for (mcmd_id = 0; mcmd_id < ZTL_TH_RC_NUM; mcmd_id++) {
+        
+        pthread_spin_destroy(&td->ucmd_spin);
+		xztl_ctx_media_exit(td->tctx);
+		zrocks_free(td->prov);
+
+		for (mcmd_id = 0; mcmd_id < ZTL_TH_RC_NUM; mcmd_id++) {
             zrocks_free(td->prp[mcmd_id]);
             free(td->mcmd[mcmd_id]);
         }
-
-        zrocks_free(td->prov);
-        xztl_ctx_media_exit(td->tctx);
-        pthread_spin_destroy(&td->ucmd_spin);
 
         pthread_join(td->wca_thread, NULL);
     }

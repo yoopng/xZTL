@@ -258,10 +258,6 @@ int   xztl_media_submit_io(struct xztl_io_mcmd *cmd);
 /* Thread context functions */
 struct xztl_mthread_ctx *xztl_ctx_media_init(uint32_t depth);
 int                      xztl_ctx_media_exit(struct xztl_mthread_ctx *tctx);
-int                      xztl_init_thread_ctxs();
-int                      xztl_exit_thread_ctxs();
-struct xztl_mthread_ctx *get_thread_ctx();
-void                     put_thread_ctx(struct xztl_mthread_ctx *ctx);
 
 /* Layer specific functions (for testing) */
 int xztl_media_init(void);
