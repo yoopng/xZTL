@@ -48,52 +48,6 @@ void zrocks_free(void *ptr) {
     xztl_media_dma_free(ptr);
 }
 
-static int __zrocks_write(struct xztl_io_ucmd *ucmd, uint64_t id, void *buf,
-                          size_t size, int32_t *node_id, int tid) {
-    uint32_t misalign;
-    size_t   new_sz, alignment;
-    int ret = 0;
-
-    alignment = ZNS_ALIGMENT * ZTL_WCA_SEC_MCMD_MIN;
-    misalign  = size % alignment;
-
-    new_sz = (misalign != 0) ? size + (alignment - misalign) : size;
-
-    if (ZROCKS_DEBUG)
-        log_infoa(
-            "__zrocks_write: ID [%lu], node_id [%d], size [%lu], new size [%lu], "
-            "aligment [%lu], misalign [%d]\n",
-            id, *node_id, size, new_sz, alignment, misalign);
-
-    ucmd->prov_type  = XZTL_CMD_WRITE;
-    ucmd->id         = id;
-    ucmd->buf        = buf;
-    ucmd->size       = new_sz;
-    ucmd->status     = 0;
-    ucmd->completed  = 0;
-    ucmd->callback   = NULL;
-    ucmd->prov       = NULL;
-    ucmd->xd.node_id = *node_id;
-    ucmd->xd.tid     = tid;
-    ret = ztl()->wca->submit_fn(ucmd);
-    if (ret) {
-        log_erra("__zrocks_write: ID %lu, node_id [%d], size [%lu], new size [%lu], "
-        "aligment [%lu], misalign [%d] ret [%d]\n",
-        id, *node_id, size, new_sz, alignment, misalign, ret);
-        return XZTL_ZROCKS_WRITE_ERR;
-    }
-        
-
-    // free thread data
-    *node_id = ucmd->xd.node_id;
-
-    xztl_stats_inc(XZTL_STATS_APPEND_BYTES_U, size);
-    xztl_stats_inc(XZTL_STATS_APPEND_BYTES, new_sz);
-    xztl_stats_inc(XZTL_STATS_APPEND_UCMD, 1);
-
-    return XZTL_OK;
-}
-
 int zrocks_new(uint64_t id, void *buf, size_t size, uint16_t level) {
     struct xztl_io_ucmd ucmd;
     // int                 ret;
@@ -110,32 +64,42 @@ int zrocks_new(uint64_t id, void *buf, size_t size, uint16_t level) {
 }
 
 int zrocks_write(void *buf, size_t size, int32_t *node_id, int tid) {
+    uint32_t misalign;
+    size_t   new_sz, alignment;
+    alignment = ZNS_ALIGMENT * ZTL_WCA_SEC_MCMD_MIN;
+    misalign  = size % alignment;
+    new_sz = (misalign != 0) ? size + (alignment - misalign) : size;
+
+    if (ZROCKS_DEBUG)
+        log_infoa(
+            "__zrocks_write: ID [%lu], node_id [%d], size [%lu], new size [%lu], "
+            "aligment [%lu], misalign [%d]\n",
+            id, *node_id, size, new_sz, alignment, misalign);
+    int ret = 0;
     struct xztl_io_ucmd ucmd;
-    int ret, off_i;
-
-    if (ZROCKS_DEBUG)
-        log_infoa("zrocks_write: node_id [%d], size [%lu], tid [%d]\n",
-                  *node_id, size, tid);
-
     ucmd.app_md = 1;
-    ret         = __zrocks_write(&ucmd, 0, buf, size, node_id, tid);
-
-    if (ZROCKS_DEBUG)
-        log_infoa("zrocks_write: node_id [%d], size [%lu], tid [%d]\n",
-                  *node_id, size, tid);
-
-    if (ret) {
-         log_erra("zrocks_write: node_id [%d], size [%lu], tid [%d] ret [%d]\n",
-                  *node_id, size, tid, ret);
+    ucmd.prov_type  = XZTL_CMD_WRITE;
+    ucmd.id         = 0;
+    ucmd.buf        = buf;
+    ucmd.size       = new_sz;
+    ucmd.status     = 0;
+    ucmd.completed  = 0;
+    ucmd.callback   = NULL;
+    ucmd.prov       = NULL;
+    ucmd.xd.node_id = *node_id;
+    ucmd.xd.tid     = tid;
+    ret = ztl()->wca->write_fn(&ucmd);
+    if (ret || ucmd.status) {
+         log_erra("zrocks_write: node_id [%d], size [%lu], tid [%d] ret [%d] status [%d]\n",
+                  *node_id, size, tid, ret, ucmd.status);
         return XZTL_ZROCKS_WRITE_ERR;
     }
 
-    if (ucmd.status) {
-        log_erra("zrocks_write: node_id [%d], size [%lu], tid [%d] status [%d]\n",
-                     *node_id, size, tid, ucmd.status);
-        return XZTL_ZROCKS_WRITE_ERR;
+    *node_id = ucmd.xd.node_id;
 
-    }
+    xztl_stats_inc(XZTL_STATS_APPEND_BYTES_U, size);
+    xztl_stats_inc(XZTL_STATS_APPEND_BYTES, new_sz);
+    xztl_stats_inc(XZTL_STATS_APPEND_UCMD, 1);
 
     return XZTL_OK;
 }
@@ -178,7 +142,7 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
                
     int retry = 0;
 READ_FAIL:
-    ret = ztl()->wca->submit_fn(&ucmd);
+    ret = ztl()->wca->read_fn(&ucmd);
     if (ret || ucmd.status) {
         log_erra("zrocks_read: submit_fn failed. node [%d] off [%lu], sz [%lu] ret [%d] status[%d]\n",
                  node_id, offset, size, ret, ucmd.status);

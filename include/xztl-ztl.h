@@ -275,6 +275,8 @@ typedef int(app_map_upsert_md)(uint64_t index, uint64_t addr,
 typedef int(app_wca_init)(void);
 typedef void(app_wca_exit)(void);
 typedef int(app_wca_submit)(struct xztl_io_ucmd *ucmd);
+typedef int(app_wca_read)(struct xztl_io_ucmd *ucmd);
+typedef int(app_wca_write)(struct xztl_io_ucmd *ucmd);
 typedef void(app_wca_callback)(struct xztl_io_mcmd *mcmd);
 
 struct app_groups {
@@ -337,6 +339,8 @@ struct app_wca_mod {
     app_wca_init *    init_fn;
     app_wca_exit *    exit_fn;
     app_wca_submit *  submit_fn;
+	app_wca_read*     read_fn;
+    app_wca_write*    write_fn;
     app_wca_callback *callback_fn;
 };
 

@@ -240,22 +240,18 @@ static uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
 
 static int ztl_thd_submit(struct xztl_io_ucmd *ucmd) {
     int  tid, ret;
-    bool flag = true;
 
     tid = ucmd->xd.tid;
 
-    if (ucmd->xd.node_id == -1) {
-        ucmd->xd.node_id = ztl_thd_getNodeId(&xtd[tid]);
-    }
 
     ret = 0;
     if (ucmd->xd.node_id != -1) {
         ucmd->xd.tdinfo = &xtd[tid];
 
         if (ucmd->prov_type == XZTL_CMD_READ) {
-            ret = ztl_wca_read_ucmd(ucmd, ucmd->xd.node_id, ucmd->offset, ucmd->size);
+            ret = ztl_wca_read_ucmd(ucmd);
         } else if (ucmd->prov_type == XZTL_CMD_WRITE) {
-            ret = ztl_wca_write_ucmd(ucmd, &ucmd->xd.node_id);
+            ret = ztl_wca_write_ucmd(ucmd);
         }
 
     } else {
@@ -292,8 +288,13 @@ static void ztl_wca_poke_ctx(struct xztl_mthread_ctx *tctx) {
     }
 }
 
-int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
-                       uint64_t offset, size_t size) {
+int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd) {
+    int tid = ucmd->xd.tid;
+    ucmd->xd.tdinfo = &xtd[tid];
+    uint64_t offset = ucmd->offset;
+    size_t size = ucmd->size;
+    uint32_t node_id = ucmd->xd.node_id;
+                       
     struct ztl_pro_node_grp *pro;
     struct ztl_pro_node *    znode;
     struct xztl_io_mcmd *    mcmd;
@@ -433,7 +434,20 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd, uint32_t node_id,
     return ret;
 }
 
-int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
+int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
+    if (ucmd->xd.node_id == -1) {
+        ucmd->xd.node_id = ztl_thd_getNodeId(&xtd[tid]);
+    }
+
+    if (ucmd->xd.node_id == -1) {
+        log_erra("ztl_wca_write_ucmd: no node resouce [%u]\n", ucmd->xd.node_id);
+        return XZTL_ZTL_WCA_S_ERR;
+    }
+
+    int32_t node_id = ucmd->xd.node_id;
+    int tid = ucmd->xd.tid;
+    ucmd->xd.tdinfo = &xtd[tid];
+
     struct app_pro_addr *prov;
     struct xztl_io_mcmd *mcmd;
     struct xztl_core *   core;
@@ -474,7 +488,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd, int32_t *node_id) {
     prov = tdinfo->prov;
     if (!prov) {
         log_erra("ztl_wca_write_ucmd: Provisioning failed. nsec [%d], node_id [%d]", nsec,
-                 *node_id);
+                 node_id);
         goto FAILURE;
     }
     ztl_pro_grp_get(glist[0], prov, nsec, node_id, tdinfo);
@@ -731,6 +745,8 @@ static struct app_wca_mod libztl_wca = {.mod_id      = LIBZTL_WCA,
                                         .init_fn     = ztl_thd_init,
                                         .exit_fn     = ztl_thd_exit,
                                         .submit_fn   = ztl_thd_submit,
+                                        .read_fn     = ztl_wca_read_ucmd,
+                                        .write_fn    = ztl_wca_write_ucmd,
                                         .callback_fn = ztl_wca_callback};
 
 void ztl_wca_register(void) {

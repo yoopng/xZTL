@@ -102,7 +102,7 @@ void ztl_pro_grp_exit(struct app_group *grp);
 int  ztl_pro_grp_put_zone(struct app_group *grp, uint32_t zone_i);
 int  ztl_pro_grp_finish_zn(struct app_group *grp, uint32_t zid, uint8_t type);
 int  ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
-                     uint32_t nsec, int32_t *node_id,
+                     uint32_t nsec, int32_t node_id,
                      struct xztl_thread *tdinfo);
 void ztl_pro_grp_free(struct app_group *grp, uint32_t zone_i, uint32_t nsec);
 int  ztl_pro_grp_node_reset(struct app_group *grp, struct ztl_pro_node *node);

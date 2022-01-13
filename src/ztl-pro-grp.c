@@ -51,11 +51,11 @@ static void ztl_pro_grp_print_status(struct app_group *grp) {
 }
 
 int ztl_pro_grp_get(struct app_group *grp, struct app_pro_addr *ctx,
-                    uint32_t nsec, int32_t *node_id,
+                    uint32_t nsec, int32_t node_id,
                     struct xztl_thread *tdinfo) {
     struct ztl_pro_node_grp *pro = NULL;
     pro                          = (struct ztl_pro_node_grp *)grp->pro;
-    struct ztl_pro_node *node    = &pro->vnodes[*node_id];
+    struct ztl_pro_node *node    = &pro->vnodes[node_id];
 
     uint64_t nlevel     = nsec / (ZTL_PRO_ZONE_NUM_INNODE * ZTL_READ_SEC_MCMD);
     int32_t  remain_sec = nsec % (ZTL_PRO_ZONE_NUM_INNODE * ZTL_READ_SEC_MCMD);
