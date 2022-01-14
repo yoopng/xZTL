@@ -25,6 +25,8 @@
 #include <ztl.h>
 #include <ztl_metadata.h>
 
+#define ZTL_NODE_MGMT_SZ  128
+
 extern uint16_t    app_ngrps;
 struct app_group   **glist;
 static uint16_t    cur_grp[ZTL_PRO_TYPES];
@@ -39,55 +41,25 @@ void ztl_pro_free(struct app_pro_addr *ctx) {
     app_grp_ctx_sub(ctx->grp);
 }
 
-struct app_pro_addr *ztl_pro_new(uint32_t nsec, int32_t *node_id) {
-    struct xztl_mp_entry *mpe;
-    struct app_pro_addr * ctx;
+int ztl_pro_new(uint32_t nsec, int32_t *node_id, struct app_pro_addr *ctx, struct xztl_thread *tdinfo) {
     struct app_group *    grp;
     int                   ret;
 
     ZDEBUG(ZDEBUG_PRO, "ztl_pro_new: nsec [%d], node_id [%d]", nsec, *node_id);
-
-    mpe = xztl_mempool_get(XZTL_ZTL_PRO_CTX, 0);
-    if (!mpe) {
-        log_erra("ztl_pro_new: mempool is empty. node_id [%d]\n", *node_id);
-        return NULL;
-    }
-
-    ctx = (struct app_pro_addr *)mpe->opaque;
-
+	
     /* For now, we consider a single group */
     grp = glist[0];
 
-    ret = ztl_pro_grp_get(grp, ctx, nsec, node_id, NULL);
+    ret = ztl_pro_grp_get(grp, ctx, nsec, node_id, tdinfo);
     if (ret) {
         log_erra("ztl_pro_new: Get group zone failed. node_id [%d]\n", *node_id);
-        xztl_mempool_put(mpe, XZTL_ZTL_PRO_CTX, 0);
-        return NULL;
+        return XZTL_ZTL_PROV_ERR;
     }
 
     ctx->grp = grp;
     app_grp_ctx_add(grp);
 
-    return ctx;
-}
-
-int ztl_pro_put_zone(struct app_group *grp, uint32_t zid) {
-    return ztl_pro_grp_put_zone(grp, zid);
-}
-
-int ztl_pro_finish_zone(struct app_group *grp, uint32_t zid, uint8_t type) {
-    return ztl_pro_grp_finish_zn(grp, zid, type);
-}
-
-int ztl_pro_node_finish(struct app_group *grp, struct ztl_pro_node *node) {
-    return ztl_pro_grp_node_finish(grp, node);
-}
-
-int ztl_pro_node_reset(struct app_group *grp, struct ztl_pro_node *node) {
-    return ztl_pro_grp_node_reset(grp, node);
-}
-
-void ztl_pro_check_gc(struct app_group *grp) {
+    return ret;
 }
 
 void ztl_pro_exit(void) {
@@ -101,23 +73,10 @@ void ztl_pro_exit(void) {
         ret--;
         ztl_pro_grp_exit(glist[ret]);
     }
+	xztl_mempool_destroy(XZTL_NODE_MGMT_ENTRY, 0);
 
     free(glist);
     log_info("ztl-pro: Global provisioning stopped.");
-}
-
-static int ztl_mempool_init(void) {
-    int ret = xztl_mempool_create(XZTL_ZTL_PRO_CTX, 0, ZTL_PRO_MP_SZ,
-                                  sizeof(struct app_pro_addr), NULL, NULL);
-    if (ret) {
-        log_erra("ztl_mempool_init: xztl_mempool_create failed ret [%d].", ret);
-        return ret;
-    }
-    return XZTL_OK;
-}
-
-static void ztl_mempool_exit(void) {
-    xztl_mempool_destroy(XZTL_ZTL_PRO_CTX, 0);
 }
 
 int ztl_pro_init(void) {
@@ -128,10 +87,10 @@ int ztl_pro_init(void) {
         log_err("ztl_pro_init: glist is NULL.\n");
         return XZTL_ZTL_GROUP_ERR;
     }
-    if (ztl_mempool_init()) {
-        log_err("ztl_pro_init: ztl_mempool_init failed.\n");
+	ret = xztl_mempool_create(XZTL_NODE_MGMT_ENTRY, 0, ZTL_NODE_MGMT_SZ,
+                        sizeof(struct xnvme_node_mgmt_entry), NULL, NULL);
+    if (ret)
         goto FREE;
-    }
 
     ret = ztl()->groups.get_list_fn(glist, app_ngrps);
     if (ret != app_ngrps) {
@@ -159,7 +118,7 @@ EXIT:
     }
 
 MP:
-    ztl_mempool_exit();
+    xztl_mempool_destroy(XZTL_NODE_MGMT_ENTRY, 0);
 FREE:
     free(glist);
     return XZTL_ZTL_GROUP_ERR;
@@ -169,13 +128,8 @@ static struct app_pro_mod ztl_pro = {.mod_id         = LIBZTL_PRO,
                                      .name           = "LIBZTL-PRO",
                                      .init_fn        = ztl_pro_init,
                                      .exit_fn        = ztl_pro_exit,
-                                     .check_gc_fn    = ztl_pro_check_gc,
-                                     .finish_zn_fn   = ztl_pro_finish_zone,
-                                     .put_zone_fn    = ztl_pro_put_zone,
                                      .new_fn         = ztl_pro_new,
                                      .free_fn        = ztl_pro_free,
-                                     .reset_node_fn  = ztl_pro_grp_node_reset,
-                                     .finish_node_fn = ztl_pro_grp_node_finish,
                                      .submit_node_fn = ztl_pro_grp_submit_mgmt};
 
 void ztl_pro_register(void) {
