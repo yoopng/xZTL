@@ -120,7 +120,7 @@ static int ztl_io_submit(struct xztl_io_ucmd *ucmd) {
 
     ret = 0;
     if (ucmd->xd.node_id != -1) {
-        ucmd->xd.tdinfo = &xtd[tid];
+        ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
 
         if (ucmd->prov_type == XZTL_CMD_READ) {
             ret = ztl_io_read_ucmd(ucmd);
@@ -164,7 +164,7 @@ static void ztl_io_write_poke_ctx(struct xztl_mthread_ctx *tctx) {
 
 int ztl_io_read_ucmd(struct xztl_io_ucmd *ucmd) {
     int tid = ucmd->xd.tid;
-    ucmd->xd.tdinfo = &xtd[tid];
+    ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
     uint64_t offset = ucmd->offset;
     size_t size = ucmd->size;
     uint32_t node_id = ucmd->xd.node_id;
@@ -309,8 +309,11 @@ int ztl_io_read_ucmd(struct xztl_io_ucmd *ucmd) {
 }
 
 int ztl_io_write_ucmd(struct xztl_io_ucmd *ucmd) {
+	int tid = ucmd->xd.tid;
+	ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
+
     if (ucmd->xd.node_id == -1) {
-        ucmd->xd.node_id = ztl_thd_getNodeId(&xtd[tid]);
+        ucmd->xd.node_id = ztl()->thd->get_nid_fn(ucmd->xd.tdinfo);
     }
 
     if (ucmd->xd.node_id == -1) {
@@ -319,8 +322,6 @@ int ztl_io_write_ucmd(struct xztl_io_ucmd *ucmd) {
     }
 
     int32_t node_id = ucmd->xd.node_id;
-    int tid = ucmd->xd.tid;
-    ucmd->xd.tdinfo = &xtd[tid];
 
     struct app_pro_addr *prov;
     struct xztl_io_mcmd *mcmd;
@@ -514,15 +515,15 @@ FAILURE:
 }
 
 static int ztl_io_init(void) {
-    return ztl_thd_init();
+    return ztl()->thd->init_fn();
 }
 
 static void ztl_io_exit(void) {
-    ztl_thd_exit();
+    ztl()->thd->exit_fn();
 }
 
 static struct app_io_mod libztl_io = {.mod_id      = LIBZTL_IO,
-                                      .name        = "LIBZTL-WCA",
+                                      .name        = "LIBZTL-IO",
                                       .init_fn     = ztl_io_init,
                                       .exit_fn     = ztl_io_exit,
                                       .read_fn     = ztl_io_read_ucmd,

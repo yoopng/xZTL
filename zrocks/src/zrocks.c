@@ -160,20 +160,11 @@ READ_FAIL:
 }
 
 int zrocks_get_resource() {
-    int tid, rettid = -1;
-
-    for (tid = 0; tid < ZTL_TH_NUM; tid++) {
-       if (!xtd[tid].usedflag) {
-           xtd[tid].usedflag = true;
-           rettid = tid;
-           break;
-      }
-    }
-    return rettid;
+    return ztl()->thd->get_fn();
 }
 
-void zrocksk_put_resource(int tid) {
-    xtd[tid].usedflag = false;
+void zrocks_put_resource(int tid) {
+    ztl()->thd->put_fn(tid);
 }
 
 int zrocks_delete(uint64_t id) {

@@ -82,7 +82,7 @@ enum xztl_mod_types {
     ZTLMOD_MAP = 0x4,
     ZTLMOD_LOG = 0x5,
     ZTLMOD_REC = 0x6,
-    ZTLMOD_GC  = 0x7,
+    ZTLMOD_THD  = 0x7,
     ZTLMOD_IO = 0x8,
 };
 
@@ -93,6 +93,9 @@ enum xztl_mod_types {
 
 /* PRO (Provisioning) modules */
 #define LIBZTL_PRO 0x2
+
+/* THD (Thread resource) modules */
+#define LIBZTL_THD 0x2
 
 /* MPE (Persistent Mapping) modules */
 #define LIBZTL_MPE 0x4
@@ -265,6 +268,13 @@ typedef void(app_io_exit)(void);
 typedef int(app_io_read)(struct xztl_io_ucmd *ucmd);
 typedef int(app_io_write)(struct xztl_io_ucmd *ucmd);
 
+typedef int(app_thd_init)(void);
+typedef void(app_thd_exit)(void);
+typedef int(app_thd_get)(void);
+typedef void(app_thd_put)(int tid);
+typedef uint32_t(app_thd_get_nid)(struct xztl_thread *tdinfo);
+typedef struct xztl_thread*(app_thd_get_xtd)(int tid);
+
 struct app_groups {
     app_grp_init *    init_fn;
     app_grp_exit *    exit_fn;
@@ -323,6 +333,18 @@ struct app_io_mod {
     app_io_write*    write_fn;
 };
 
+struct app_thd_mod {
+    uint8_t           mod_id;
+    char *            name;
+    app_thd_init *    init_fn;
+    app_thd_exit *    exit_fn;
+	app_thd_get*      get_fn;
+    app_thd_put*      put_fn;
+	app_thd_get_nid*  get_nid_fn;
+    app_thd_get_xtd*  get_xtd_fn;
+};
+
+
 struct app_global {
     struct app_groups groups;
     struct app_mpe    smap;
@@ -332,7 +354,8 @@ struct app_global {
     struct app_pro_mod *pro;
     struct app_mpe_mod *mpe;
     struct app_map_mod *map;
-    struct app_io_mod *io;
+    struct app_io_mod  *io;
+	struct app_thd_mod *thd;
 };
 
 /* Built-in group functions */

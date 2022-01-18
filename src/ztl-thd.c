@@ -49,7 +49,7 @@ static int ztl_thd_allocNode_for_thd(struct xztl_thread *tdinfo) {
     return cnt;
 }
 
-uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
+static uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
     struct ztl_pro_node *node = STAILQ_FIRST(&tdinfo->free_head);
     int                  cnt  = 0;
 
@@ -73,6 +73,26 @@ uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
     return node->id;
 }
 
+static struct xztl_thread* ztl_thd_getXtd(int tid) {
+	return &xtd[tid];
+}
+
+static int ztl_thd_get_resource(void) {
+    int tid, rettid = -1;
+
+    for (tid = 0; tid < ZTL_TH_NUM; tid++) {
+       if (!xtd[tid].usedflag) {
+           xtd[tid].usedflag = true;
+           rettid = tid;
+           break;
+      }
+    }
+    return rettid;
+}
+
+static void ztl_thd_put_resource(int tid) {
+    xtd[tid].usedflag = false;
+}
 
 static int _ztl_thd_init(struct xztl_thread *td) {
     int mcmd_id;
@@ -106,7 +126,7 @@ static int _ztl_thd_init(struct xztl_thread *td) {
     return XZTL_OK;
 }
 
-int ztl_thd_init(void) {
+static int ztl_thd_init(void) {
     int tid, ret;
 
     for (tid = 0; tid < ZTL_TH_NUM; tid++) {
@@ -122,7 +142,7 @@ int ztl_thd_init(void) {
     return ret;
 }
 
-void ztl_thd_exit(void) {
+static void ztl_thd_exit(void) {
     int                 tid, ret;
     struct xztl_thread *td = NULL;
     int                 mcmd_id;
@@ -146,5 +166,17 @@ void ztl_thd_exit(void) {
     log_info("ztl_thd_exit: ztl-thd stopped.\n");
 }
 
+static struct app_thd_mod libztl_thd = {.mod_id     = LIBZTL_THD,
+                                        .name        = "LIBZTL-THD",
+                                        .init_fn     = ztl_thd_init,
+                                        .exit_fn     = ztl_thd_exit,
+                                        .get_fn      = ztl_thd_get_resource,
+                                        .put_fn      = ztl_thd_put_resource,
+                                        .get_nid_fn  = ztl_thd_getNodeId,
+                                        .get_xtd_fn  = ztl_thd_getXtd};
+
+void ztl_io_register(void) {
+    ztl_mod_register(ZTLMOD_THD, LIBZTL_THD, &libztl_thd);
+}
 
 
