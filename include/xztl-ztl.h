@@ -73,7 +73,6 @@ struct xztl_thread {
 
     bool usedflag;
 };
-struct xztl_thread xtd[ZTL_TH_NUM];
 
 enum xztl_mod_types {
     ZTLMOD_BAD = 0x0,
@@ -84,7 +83,7 @@ enum xztl_mod_types {
     ZTLMOD_LOG = 0x5,
     ZTLMOD_REC = 0x6,
     ZTLMOD_GC  = 0x7,
-    ZTLMOD_WCA = 0x8,
+    ZTLMOD_IO = 0x8,
 };
 
 /* BAD (Bad Block Info) modules - NOT USED */
@@ -102,10 +101,7 @@ enum xztl_mod_types {
 #define LIBZTL_MAP 0x2
 
 /* WCA (Write-cache) modules */
-#define LIBZTL_WCA 0x3
-
-/* GC (Garbage collection) modules */
-#define LIBZTL_GC 0x2
+#define LIBZTL_IO 0x3
 
 /* LOG (Write-ahead logging) modules */
 #define LIBZTL_LOG 0x2
@@ -264,12 +260,10 @@ typedef uint64_t(app_map_read)(uint64_t id);
 typedef int(app_map_upsert_md)(uint64_t index, uint64_t addr,
                                uint64_t old_addr);
 
-typedef int(app_wca_init)(void);
-typedef void(app_wca_exit)(void);
-typedef int(app_wca_submit)(struct xztl_io_ucmd *ucmd);
-typedef int(app_wca_read)(struct xztl_io_ucmd *ucmd);
-typedef int(app_wca_write)(struct xztl_io_ucmd *ucmd);
-typedef void(app_wca_callback)(struct xztl_io_mcmd *mcmd);
+typedef int(app_io_init)(void);
+typedef void(app_io_exit)(void);
+typedef int(app_io_read)(struct xztl_io_ucmd *ucmd);
+typedef int(app_io_write)(struct xztl_io_ucmd *ucmd);
 
 struct app_groups {
     app_grp_init *    init_fn;
@@ -320,15 +314,13 @@ struct app_map_mod {
     app_map_upsert_md *upsert_md_fn;
 };
 
-struct app_wca_mod {
+struct app_io_mod {
     uint8_t           mod_id;
     char *            name;
-    app_wca_init *    init_fn;
-    app_wca_exit *    exit_fn;
-    app_wca_submit *  submit_fn;
-	app_wca_read*     read_fn;
-    app_wca_write*    write_fn;
-    app_wca_callback *callback_fn;
+    app_io_init *    init_fn;
+    app_io_exit *    exit_fn;
+	app_io_read*     read_fn;
+    app_io_write*    write_fn;
 };
 
 struct app_global {
@@ -340,7 +332,7 @@ struct app_global {
     struct app_pro_mod *pro;
     struct app_mpe_mod *mpe;
     struct app_map_mod *map;
-    struct app_wca_mod *wca;
+    struct app_io_mod *io;
 };
 
 /* Built-in group functions */

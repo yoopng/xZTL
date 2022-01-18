@@ -88,7 +88,7 @@ int zrocks_write(void *buf, size_t size, int32_t *node_id, int tid) {
     ucmd.prov       = NULL;
     ucmd.xd.node_id = *node_id;
     ucmd.xd.tid     = tid;
-    ret = ztl()->wca->write_fn(&ucmd);
+    ret = ztl()->io->write_fn(&ucmd);
     if (ret || ucmd.status) {
          log_erra("zrocks_write: node_id [%d], size [%lu], tid [%d] ret [%d] status [%d]\n",
                   *node_id, size, tid, ret, ucmd.status);
@@ -142,7 +142,7 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
                
     int retry = 0;
 READ_FAIL:
-    ret = ztl()->wca->read_fn(&ucmd);
+    ret = ztl()->io->read_fn(&ucmd);
     if (ret || ucmd.status) {
         log_erra("zrocks_read: submit_fn failed. node [%d] off [%lu], sz [%lu] ret [%d] status[%d]\n",
                  node_id, offset, size, ret, ucmd.status);
