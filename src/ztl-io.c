@@ -31,17 +31,7 @@
 
 extern struct app_group **glist;
 
-uint8_t THREAD_NUM;
-
-static void *zrocks_alloc(size_t size) {
-    return xztl_media_dma_alloc(size);
-}
-
-static void zrocks_free(void *ptr) {
-    xztl_media_dma_free(ptr);
-}
-
-static void zrocks_read_callback_mcmd(void *arg) {
+static void ztl_io_read_callback_mcmd(void *arg) {
     struct xztl_io_ucmd *ucmd;
     struct xztl_io_mcmd *mcmd;
     uint32_t             misalign;
@@ -51,7 +41,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
 
     if (mcmd->status) {
         xztl_stats_inc(XZTL_STATS_READ_CALLBACK_FAIL, 1);
-        log_erra("zrocks_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
+        log_erra("ztl_io_read_callback_mcmd: Callback. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. St [%d]\n",
            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
            ucmd->moffset[mcmd->sequence], mcmd->status);
 
@@ -60,7 +50,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
             int ret = xztl_media_submit_io(mcmd);
             if (ret) {
                 xztl_stats_inc(XZTL_STATS_READ_SUBMIT_FAIL, 1);
-                log_erra("zrocks_read_callback_mcmd: submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
+                log_erra("ztl_io_read_callback_mcmd: submit_io. ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
                            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                            ucmd->moffset[mcmd->sequence], ret);
             }
@@ -82,72 +72,7 @@ static void zrocks_read_callback_mcmd(void *arg) {
     }
 }
 
-/* This function checks if the media offsets are sequential.
- * If not, we return a negative value. For now we do not support
- * multi-piece mapping in ZTL-managed mapping */
-/*static int ztl_wca_check_offset_seq(struct xztl_io_ucmd *ucmd) {
-    uint32_t off_i;
-
-    for (off_i = 1; off_i < ucmd->nmcmd; off_i++) {
-        if (ucmd->moffset[off_i] !=
-            ucmd->moffset[off_i - 1] + ucmd->msec[off_i - 1]) {
-            return -1;
-        }
-    }
-
-    return XZTL_OK;
-}*/
-
-/* This function prepares a multi-piece mapping to return to the user.
- * Each entry contains the offset and size, and the full list represents
- * the entire buffer. */
-static void ztl_wca_reorg_ucmd_off(struct xztl_io_ucmd *ucmd) {
-    uint32_t off_i, curr, first_off, size;
-
-    curr      = 0;
-    first_off = 0;
-    size      = 0;
-
-    for (off_i = 1; off_i < ucmd->nmcmd; off_i++) {
-        size += ucmd->msec[off_i - 1];
-
-        /* If offset of sector is not sequential to the previousi one */
-        if ((ucmd->moffset[off_i] !=
-             ucmd->moffset[off_i - 1] + ucmd->msec[off_i - 1]) ||
-
-            /* Or zone is not the same as the previous one */
-            (ucmd->mcmd[off_i]->addr[0].g.zone !=
-             ucmd->mcmd[off_i - 1]->addr[0].g.zone)) {
-            /* Close the piece and set first offset + size */
-            ucmd->moffset[curr] = ucmd->moffset[first_off];
-            ucmd->msec[curr]    = size;
-
-            first_off = off_i;
-            size      = 0;
-            curr++;
-
-            /* If this is the last sector, we need to add it to the list */
-            if (off_i == ucmd->nmcmd - 1) {
-                size += ucmd->msec[first_off];
-                ucmd->moffset[curr] = ucmd->moffset[first_off];
-                ucmd->msec[curr]    = size;
-                curr++;
-            }
-
-            /* If this is the last sector and belongs to the previous piece */
-        } else if (off_i == ucmd->nmcmd - 1) {
-            /* Merge sector to the previous piece */
-            size += ucmd->msec[off_i];
-            ucmd->moffset[curr] = ucmd->moffset[first_off];
-            ucmd->msec[curr]    = size;
-            curr++;
-        }
-    }
-
-    ucmd->noffs = (ucmd->nmcmd > 1) ? curr : 1;
-}
-
-static void ztl_wca_callback_mcmd(void *arg) {
+static void ztl_io_write_callback_mcmd(void *arg) {
     struct xztl_io_ucmd * ucmd;
     struct xztl_io_mcmd * mcmd;
     struct app_map_entry  map;
@@ -162,7 +87,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
 
     if (mcmd->status) {
         xztl_stats_inc(XZTL_STATS_WRITE_CALLBACK_FAIL, 1);
-        log_erra("ztl_wca_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
+        log_erra("ztl_io_write_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
             ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
             ucmd->moffset[mcmd->sequence], mcmd->status);
         mcmd->callback_err_cnt++;
@@ -170,7 +95,7 @@ static void ztl_wca_callback_mcmd(void *arg) {
             int ret = xztl_media_submit_io(mcmd);
             if (ret) {
                 xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
-                log_erra("ztl_wca_callback_mcmd: submit ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
+                log_erra("ztl_io_write_callback_mcmd: submit ID [%lu], S [%d/%d], C %d, WOFF [0x%lx]. ret [%d]\n",
                            ucmd->id, mcmd->sequence, ucmd->nmcmd, ucmd->ncb,
                            ucmd->moffset[mcmd->sequence], ret);
             }
@@ -189,80 +114,28 @@ static void ztl_wca_callback_mcmd(void *arg) {
     }
 }
 
-static void ztl_wca_callback(struct xztl_io_mcmd *mcmd) {
-    ztl_wca_callback_mcmd(mcmd);
-}
-
-static int ztl_thd_allocNode_for_thd(struct xztl_thread *tdinfo) {
-    struct ztl_pro_node_grp *pro = (struct ztl_pro_node_grp *)(glist[0]->pro);
-
-    uint32_t snodeidx = 0;
-    uint32_t cnt      = 0;
-
-    pthread_spin_lock(&pro->spin);
-
-    for (int i = 0; i < pro->totalnode && cnt < ZTL_ALLOC_NODE_NUM; i++) {
-        if (XZTL_ZMD_NODE_FREE == pro->vnodes[i].status &&
-            pro->vnodes[i].zone_num == ZTL_PRO_ZONE_NUM_INNODE) {
-            pro->vnodes[i].status = XZTL_ZMD_NODE_USED;
-            STAILQ_INSERT_TAIL(&(tdinfo->free_head), &(pro->vnodes[i]), fentry);
-            cnt++;
-            tdinfo->nfree++;
-        }
-    }
-    pthread_spin_unlock(&pro->spin);
-
-    return cnt;
-}
-
-static uint32_t ztl_thd_getNodeId(struct xztl_thread *tdinfo) {
-    struct ztl_pro_node *node = STAILQ_FIRST(&tdinfo->free_head);
-    int                  cnt  = 0;
-
-    if (!node) {
-        cnt = ztl_thd_allocNode_for_thd(tdinfo);
-        if (cnt == 0) {
-            log_err("ztl_thd_getNodeId: No available node resource.\n");
-            return XZTL_ZTL_WCA_ERR;
-        } else {
-            node = STAILQ_FIRST(&tdinfo->free_head);
-            if (!node) {
-                log_err("ztl_thd_getNodeId: Invalid node.\n");
-                return XZTL_ZTL_WCA_ERR;
-            }
-        }
-    }
-
-    STAILQ_REMOVE_HEAD(&tdinfo->free_head, fentry);
-    tdinfo->nfree--;
-
-    return node->id;
-}
-
-static int ztl_thd_submit(struct xztl_io_ucmd *ucmd) {
+static int ztl_io_submit(struct xztl_io_ucmd *ucmd) {
     int  tid, ret;
-
     tid = ucmd->xd.tid;
-
 
     ret = 0;
     if (ucmd->xd.node_id != -1) {
-        ucmd->xd.tdinfo = &xtd[tid];
+        ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
 
         if (ucmd->prov_type == XZTL_CMD_READ) {
-            ret = ztl_wca_read_ucmd(ucmd);
+            ret = ztl_io_read_ucmd(ucmd);
         } else if (ucmd->prov_type == XZTL_CMD_WRITE) {
-            ret = ztl_wca_write_ucmd(ucmd);
+            ret = ztl_io_write_ucmd(ucmd);
         }
 
     } else {
-        log_err("ztl_thd_submit: No available node resource.\n");
+        log_err("ztl_io_submit: No available node resource.\n");
     }
 
     return ret;
 }
 
-static uint32_t ztl_wca_ncmd_prov_based(struct app_pro_addr *prov) {
+static uint32_t ztl_io_write_ncmd_prov_based(struct app_pro_addr *prov) {
     uint32_t zn_i, ncmd;
 
     ncmd = 0;
@@ -275,7 +148,7 @@ static uint32_t ztl_wca_ncmd_prov_based(struct app_pro_addr *prov) {
     return ncmd;
 }
 
-static void ztl_wca_poke_ctx(struct xztl_mthread_ctx *tctx) {
+static void ztl_io_write_poke_ctx(struct xztl_mthread_ctx *tctx) {
     struct xztl_misc_cmd misc;
     misc.opcode         = XZTL_MISC_ASYNCH_POKE;
     misc.asynch.ctx_ptr = tctx;
@@ -289,9 +162,9 @@ static void ztl_wca_poke_ctx(struct xztl_mthread_ctx *tctx) {
     }
 }
 
-int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd) {
+int ztl_io_read_ucmd(struct xztl_io_ucmd *ucmd) {
     int tid = ucmd->xd.tid;
-    ucmd->xd.tdinfo = &xtd[tid];
+    ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
     uint64_t offset = ucmd->offset;
     size_t size = ucmd->size;
     uint32_t node_id = ucmd->xd.node_id;
@@ -365,7 +238,7 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd) {
         mcmd->addr[0].g.sect =
             znode->vzones[zindex]->addr.g.sect + zone_sec_off;
         mcmd->status   = 0;
-        mcmd->callback = zrocks_read_callback_mcmd;
+        mcmd->callback = ztl_io_read_callback_mcmd;
 
         mcmd->sequence    = misalign;  // tmp prp offset
         mcmd->sequence_zn = zindex;
@@ -435,9 +308,12 @@ int ztl_wca_read_ucmd(struct xztl_io_ucmd *ucmd) {
     return ret;
 }
 
-int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
+int ztl_io_write_ucmd(struct xztl_io_ucmd *ucmd) {
+	int tid = ucmd->xd.tid;
+	ucmd->xd.tdinfo = ztl()->thd->get_xtd_fn(tid);
+
     if (ucmd->xd.node_id == -1) {
-        ucmd->xd.node_id = ztl_thd_getNodeId(&xtd[tid]);
+        ucmd->xd.node_id = ztl()->thd->get_nid_fn(ucmd->xd.tdinfo);
     }
 
     if (ucmd->xd.node_id == -1) {
@@ -446,8 +322,6 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
     }
 
     int32_t node_id = ucmd->xd.node_id;
-    int tid = ucmd->xd.tid;
-    ucmd->xd.tdinfo = &xtd[tid];
 
     struct app_pro_addr *prov;
     struct xztl_io_mcmd *mcmd;
@@ -499,7 +373,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
 		goto FAILURE;
 
     /* We check the number of commands again based on the provisioning */
-    ncmd = ztl_wca_ncmd_prov_based(prov);
+    ncmd = ztl_io_write_ncmd_prov_based(prov);
     if (ncmd > XZTL_IO_MAX_MCMD) {
         log_erra(
             "ztl_wca_write_ucmd: User command exceed XZTL_IO_MAX_MCMD. "
@@ -559,7 +433,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
             mcmd->prp[0]      = boff;
             boff += core->media->geo.nbytes * mcmd->nsec[0];
 
-            mcmd->callback  = ztl_wca_callback_mcmd;
+            mcmd->callback  = ztl_io_write_callback_mcmd;
             mcmd->opaque    = ucmd;
             mcmd->async_ctx = tctx;
 
@@ -590,7 +464,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
             /* Limit to 1 write per zone if append is not supported */
             if (!XZTL_WRITE_APPEND) {
                 if (ucmd->minflight[zn_i]) {
-                    ztl_wca_poke_ctx(tctx);
+                    ztl_io_write_poke_ctx(tctx);
                     continue;
                 }
 
@@ -600,7 +474,7 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
             ret = xztl_media_submit_io(ucmd->mcmd[zn_cmd_id[zn_i][index]]);
             if (ret) {
                 xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
-                ztl_wca_poke_ctx(tctx);
+                ztl_io_write_poke_ctx(tctx);
                 zn_i--;
                 continue;
             }
@@ -610,14 +484,14 @@ int ztl_wca_write_ucmd(struct xztl_io_ucmd *ucmd) {
             zn_cmd_id_index[zn_i]++;
 
             if (submitted % ZTL_PRO_STRIPE == 0)
-                ztl_wca_poke_ctx(tctx);
+                ztl_io_write_poke_ctx(tctx);
         }
         usleep(1);
     }
 
     /* Poke the context for completions */
     while (ucmd->ncb < ucmd->nmcmd) {
-        ztl_wca_poke_ctx(tctx);
+        ztl_io_write_poke_ctx(tctx);
     }
 
     ZDEBUG(ZDEBUG_WCA, " ztl_wca_write_ucmd: Submitted [%d]", submitted);
@@ -640,121 +514,22 @@ FAILURE:
     return XZTL_ZTL_WCA_S_ERR;
 }
 
-static void *ztl_process_th(void *arg) {
-    struct xztl_io_ucmd *ucmd;
-
-    uint8_t             tid = *(uint8_t *)arg; // NOLINT
-    struct xztl_thread *td  = &xtd[tid];
-
-    td->wca_running = 1;
-
-    while (td->wca_running) {
-NEXT:
-        if (!STAILQ_EMPTY(&td->ucmd_head)) {
-            pthread_spin_lock(&td->ucmd_spin);
-
-            ucmd = STAILQ_FIRST(&td->ucmd_head);
-            STAILQ_REMOVE_HEAD(&td->ucmd_head, entry);
-
-            pthread_spin_unlock(&td->ucmd_spin);
-
-            if (ucmd->prov_type == XZTL_CMD_READ) {
-                ztl_wca_read_ucmd(ucmd, ucmd->xd.node_id, ucmd->offset,
-                                  ucmd->size);
-            } else if (ucmd->prov_type == XZTL_CMD_WRITE) {
-                ztl_wca_write_ucmd(ucmd, &ucmd->xd.node_id);
-            }
-
-            goto NEXT;
-        }
-    }
-
-    return NULL;
+static int ztl_io_init(void) {
+    return ztl()->thd->init_fn();
 }
 
-static int _ztl_thd_init(struct xztl_thread *td) {
-    int mcmd_id;
-
-    td->usedflag = false;
-
-    for (mcmd_id = 0; mcmd_id < ZTL_TH_RC_NUM; mcmd_id++) {
-        // each mcmd read max 256K(64 * 4K)
-        td->prp[mcmd_id] = zrocks_alloc(256 * 1024);
-        td->mcmd[mcmd_id] = aligned_alloc(64, sizeof(struct xztl_io_mcmd));
-    }
-
-    td->prov = zrocks_alloc(sizeof(struct app_pro_addr));
-    if (!td->prov) {
-        log_err("_ztl_thd_init: Thread resource (data buffer) allocation error.");
-        return XZTL_ZTL_WCA_ERR;
-    }
-
-    struct app_pro_addr *prov = (struct app_pro_addr *)td->prov;
-    prov->grp                 = glist[0];
-
-    td->tctx = xztl_ctx_media_init(XZTL_CTX_NVME_DEPTH);
-    if (!td->tctx) {
-        log_err("_ztl_thd_init: Thread resource (tctx) allocation error.");
-        return XZTL_ZTL_WCA_ERR;
-    }
-
-    STAILQ_INIT(&td->free_head);
-    if (pthread_spin_init(&td->ucmd_spin, 0))
-        return XZTL_ZTL_WCA_ERR;
-    return XZTL_OK;
+static void ztl_io_exit(void) {
+    ztl()->thd->exit_fn();
 }
 
-static int ztl_thd_init(void) {
-    int tid, ret;
-    THREAD_NUM = 0;
+static struct app_io_mod libztl_io = {.mod_id      = LIBZTL_IO,
+                                      .name        = "LIBZTL-IO",
+                                      .init_fn     = ztl_io_init,
+                                      .exit_fn     = ztl_io_exit,
+                                      .read_fn     = ztl_io_read_ucmd,
+                                      .write_fn    = ztl_io_write_ucmd};
 
-    for (tid = 0; tid < ZTL_TH_NUM; tid++) {
-        xtd[tid].tid = tid;
-        ret          = _ztl_thd_init(&xtd[tid]);
-        if (!ret) {
-            THREAD_NUM++;
-        } else {
-            log_erra("ztl_thd_init: thread [%d] created failed.", tid);
-            break;
-        }
-    }
-
-    return ret;
+void ztl_io_register(void) {
+    ztl_mod_register(ZTLMOD_IO, LIBZTL_IO, &libztl_io);
 }
 
-static void ztl_thd_exit(void) {
-    int                 tid, ret;
-    struct xztl_thread *td = NULL;
-    int                 mcmd_id;
-
-    for (tid = 0; tid < ZTL_TH_NUM; tid++) {
-        td              = &xtd[tid];
-        td->wca_running = 0;
-        
-        pthread_spin_destroy(&td->ucmd_spin);
-		xztl_ctx_media_exit(td->tctx);
-		zrocks_free(td->prov);
-
-		for (mcmd_id = 0; mcmd_id < ZTL_TH_RC_NUM; mcmd_id++) {
-            zrocks_free(td->prp[mcmd_id]);
-            free(td->mcmd[mcmd_id]);
-        }
-
-        pthread_join(td->wca_thread, NULL);
-    }
-
-    log_info("ztl_thd_exit: ztl-thd stopped.\n");
-}
-
-static struct app_wca_mod libztl_wca = {.mod_id      = LIBZTL_WCA,
-                                        .name        = "LIBZTL-WCA",
-                                        .init_fn     = ztl_thd_init,
-                                        .exit_fn     = ztl_thd_exit,
-                                        .submit_fn   = ztl_thd_submit,
-                                        .read_fn     = ztl_wca_read_ucmd,
-                                        .write_fn    = ztl_wca_write_ucmd,
-                                        .callback_fn = ztl_wca_callback};
-
-void ztl_wca_register(void) {
-    ztl_mod_register(ZTLMOD_WCA, LIBZTL_WCA, &libztl_wca);
-}

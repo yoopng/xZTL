@@ -29,8 +29,8 @@
 #define XZTL_WRITE_APPEND 0
 
 /* Number of maximum addresses in a single command vector.
- *     A single address is needed for zone append. We should
- *     increase this number in case of possible vectored I/Os. */
+ * 	A single address is needed for zone append. We should
+ * 	increase this number in case of possible vectored I/Os. */
 #define XZTL_MAX_MADDR 1
 
 #define XZTL_MCTX_SZ 640

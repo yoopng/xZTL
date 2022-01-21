@@ -155,7 +155,7 @@ static int app_global_init(void) {
         goto MPE;
     }
 
-    ret = ztl()->wca->init_fn();
+    ret = ztl()->io->init_fn();
     if (ret) {
         log_err("app_global_init: Write-cache NOT started.\n");
         ret = XZTL_ZTL_WCA_ERR;
@@ -184,7 +184,7 @@ static void app_global_exit(void) {
         ztl()->recovery->exit_fn ();
     }*/
 
-    ztl()->wca->exit_fn();
+    ztl()->io->exit_fn();
     ztl()->map->exit_fn();
     app_mpe_exit();
     ztl()->pro->exit_fn();
@@ -221,8 +221,8 @@ int ztl_mod_set(uint8_t *modset) {
                 case ZTLMOD_MAP:
                     ztl()->map = (struct app_map_mod *)mod;
                     break;
-                case ZTLMOD_WCA:
-                    ztl()->wca = (struct app_wca_mod *)mod;
+                case ZTLMOD_IO:
+                    ztl()->io = (struct app_io_mod *)mod;
                     break;
                 default:
                     log_erra("ztl_mod_set: Invalid module ID [%d]", mod_i);

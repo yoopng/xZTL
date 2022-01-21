@@ -88,7 +88,7 @@ int zrocks_write(void *buf, size_t size, int32_t *node_id, int tid) {
     ucmd.prov       = NULL;
     ucmd.xd.node_id = *node_id;
     ucmd.xd.tid     = tid;
-    ret = ztl()->wca->write_fn(&ucmd);
+    ret = ztl()->io->write_fn(&ucmd);
     if (ret || ucmd.status) {
          log_erra("zrocks_write: node_id [%d], size [%lu], tid [%d] ret [%d] status [%d]\n",
                   *node_id, size, tid, ret, ucmd.status);
@@ -142,7 +142,7 @@ int zrocks_read(uint32_t node_id, uint64_t offset, void *buf, uint64_t size,
                
     int retry = 0;
 READ_FAIL:
-    ret = ztl()->wca->read_fn(&ucmd);
+    ret = ztl()->io->read_fn(&ucmd);
     if (ret || ucmd.status) {
         log_erra("zrocks_read: submit_fn failed. node [%d] off [%lu], sz [%lu] ret [%d] status[%d]\n",
                  node_id, offset, size, ret, ucmd.status);
@@ -160,20 +160,11 @@ READ_FAIL:
 }
 
 int zrocks_get_resource() {
-    int tid, rettid = -1;
-
-    for (tid = 0; tid < ZTL_TH_NUM; tid++) {
-       if (!xtd[tid].usedflag) {
-           xtd[tid].usedflag = true;
-           rettid = tid;
-           break;
-      }
-    }
-    return rettid;
+    return ztl()->thd->get_fn();
 }
 
-void zrocksk_put_resource(int tid) {
-    xtd[tid].usedflag = false;
+void zrocks_put_resource(int tid) {
+    ztl()->thd->put_fn(tid);
 }
 
 int zrocks_delete(uint64_t id) {
