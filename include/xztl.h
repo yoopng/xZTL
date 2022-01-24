@@ -199,7 +199,8 @@ enum xztl_status {
     XZTL_MEDIA_ERROR    = 0x100,
     XZTL_ZROCKS_INIT_ERR = 0x101,
     XZTL_ZROCKS_WRITE_ERR = 0x102,
-    XZTL_ZROCKS_READ_ERR = 0X103
+    XZTL_ZROCKS_READ_ERR = 0X103,
+    XZTL_ZTL_MGMT_ERR = 0X104
 };
 
 enum xztl_stats_io_types {

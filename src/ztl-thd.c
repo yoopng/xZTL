@@ -175,7 +175,7 @@ static struct app_thd_mod libztl_thd = {.mod_id     = LIBZTL_THD,
                                         .get_nid_fn  = ztl_thd_getNodeId,
                                         .get_xtd_fn  = ztl_thd_getXtd};
 
-void ztl_io_register(void) {
+void ztl_thd_register(void) {
     ztl_mod_register(ZTLMOD_THD, LIBZTL_THD, &libztl_thd);
 }
 
