@@ -56,6 +56,7 @@ set(SOURCE_FILES
     ${PROJECT_SOURCE_DIR}/src/ztl-map.c
     ${PROJECT_SOURCE_DIR}/src/ztl-io.c
     ${PROJECT_SOURCE_DIR}/src/ztl-thd.c
+    ${PROJECT_SOURCE_DIR}/src/ztl-mgmt-cmd.c
     ${PROJECT_SOURCE_DIR}/src/ztl_metadata.c
 )
 

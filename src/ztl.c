@@ -162,8 +162,17 @@ static int app_global_init(void) {
         goto MAP;
     }
 
+	ret = ztl()->mgmt->init_fn();
+    if (ret) {
+        log_err("app_global_init: Management-command NOT started.\n");
+        ret = XZTL_ZTL_MGMT_ERR;
+        goto IO;
+    }
+
     return XZTL_OK;
 
+IO:
+	ztl()->io->exit_fn();
 MAP:
     ztl()->map->exit_fn();
 MPE:
@@ -184,6 +193,7 @@ static void app_global_exit(void) {
         ztl()->recovery->exit_fn ();
     }*/
 
+	ztl()->mgmt->exit_fn();
     ztl()->io->exit_fn();
     ztl()->map->exit_fn();
     app_mpe_exit();

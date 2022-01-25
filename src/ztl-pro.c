@@ -129,8 +129,7 @@ static struct app_pro_mod ztl_pro = {.mod_id         = LIBZTL_PRO,
                                      .init_fn        = ztl_pro_init,
                                      .exit_fn        = ztl_pro_exit,
                                      .new_fn         = ztl_pro_new,
-                                     .free_fn        = ztl_pro_free,
-                                     .submit_node_fn = ztl_pro_grp_submit_mgmt};
+                                     .free_fn        = ztl_pro_free};
 
 void ztl_pro_register(void) {
     ztl_mod_register(ZTLMOD_PRO, LIBZTL_PRO, &ztl_pro);

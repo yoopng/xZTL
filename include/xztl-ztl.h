@@ -75,15 +75,16 @@ struct xztl_thread {
 };
 
 enum xztl_mod_types {
-    ZTLMOD_BAD = 0x0,
-    ZTLMOD_ZMD = 0x1,
-    ZTLMOD_PRO = 0x2,
-    ZTLMOD_MPE = 0x3,
-    ZTLMOD_MAP = 0x4,
-    ZTLMOD_LOG = 0x5,
-    ZTLMOD_REC = 0x6,
+    ZTLMOD_BAD  = 0x0,
+    ZTLMOD_ZMD  = 0x1,
+    ZTLMOD_PRO  = 0x2,
+    ZTLMOD_MPE  = 0x3,
+    ZTLMOD_MAP  = 0x4,
+    ZTLMOD_LOG  = 0x5,
+    ZTLMOD_REC  = 0x6,
     ZTLMOD_THD  = 0x7,
-    ZTLMOD_IO = 0x8,
+    ZTLMOD_IO   = 0x8,
+    ZTLMOD_MGMT = 0x9,
 };
 
 /* BAD (Bad Block Info) modules - NOT USED */
@@ -93,6 +94,9 @@ enum xztl_mod_types {
 
 /* PRO (Provisioning) modules */
 #define LIBZTL_PRO 0x2
+
+/* MGMT (Management command) modules */
+#define LIBZTL_MGMT 0x2
 
 /* THD (Thread resource) modules */
 #define LIBZTL_THD 0x2
@@ -245,8 +249,6 @@ typedef int(app_pro_init)(void);
 typedef void(app_pro_exit)(void);
 typedef int(app_pro_new)(uint32_t nsec, int32_t *node_id, struct app_pro_addr *ctx, struct xztl_thread *tdinfo);
 typedef void(app_pro_free)(struct app_pro_addr *ctx);
-typedef int(app_pro_submit_node)(struct app_group *   grp,
-                                 struct ztl_pro_node *node, int32_t op_code);
 
 typedef int(app_mpe_create)(void);
 typedef int(app_mpe_load)(void);
@@ -275,6 +277,11 @@ typedef void(app_thd_put)(int tid);
 typedef uint32_t(app_thd_get_nid)(struct xztl_thread *tdinfo);
 typedef struct xztl_thread*(app_thd_get_xtd)(int tid);
 
+typedef int(app_mgmt_init)(void);
+typedef void(app_mgmt_exit)(void);
+typedef int(app_mgmt_reset)(struct app_group *grp, struct ztl_pro_node *node, int32_t op_code);
+typedef int(app_mgmt_finish)(struct app_group *grp, struct ztl_pro_node *node, int32_t op_code);
+
 struct app_groups {
     app_grp_init *    init_fn;
     app_grp_exit *    exit_fn;
@@ -300,7 +307,6 @@ struct app_pro_mod {
     app_pro_exit *       exit_fn;
     app_pro_new *        new_fn;
     app_pro_free *       free_fn;
-    app_pro_submit_node *submit_node_fn;
 };
 
 struct app_mpe_mod {
@@ -344,6 +350,16 @@ struct app_thd_mod {
     app_thd_get_xtd*  get_xtd_fn;
 };
 
+struct app_mgmt_mod {
+    uint8_t           mod_id;
+    char *            name;
+    app_mgmt_init *   init_fn;
+    app_mgmt_exit *   exit_fn;
+	//app_mgmt_open*    open_fn;
+    //app_mgmt_close*   close_fn;
+	app_mgmt_reset*   reset_fn;
+    app_mgmt_finish*  finish_fn;
+};
 
 struct app_global {
     struct app_groups groups;
@@ -356,6 +372,7 @@ struct app_global {
     struct app_map_mod *map;
     struct app_io_mod  *io;
 	struct app_thd_mod *thd;
+	struct app_mgmt_mod *mgmt;
 };
 
 /* Built-in group functions */

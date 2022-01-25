@@ -183,7 +183,7 @@ int zrocks_trim(uint32_t node_id) {
     if (ZROCKS_DEBUG)
         log_infoa("zrocks_trim: node ID [%u]\n", node->id);
 
-    ret = ztl()->pro->submit_node_fn(grp, node, ZTL_MGMG_RESET_ZONE);
+    ret = ztl()->mgmt->reset_fn(grp, node, ZTL_MGMG_RESET_ZONE);
     if (ret) {
         log_infoa("zrocks_trim: node ID [%u], ret [%d]\n", node->id, ret);
     }
@@ -204,7 +204,7 @@ int zrocks_node_finish(uint32_t node_id) {
         (struct ztl_pro_node *)(&node_grp->vnodes[node_id]);
     int ret;
 
-    ret = ztl()->pro->submit_node_fn(grp, node, ZTL_MGMG_FULL_ZONE);
+    ret = ztl()->mgmt->finish_fn(grp, node, ZTL_MGMG_FULL_ZONE);
     if (ret) {
         log_erra("zrocks_node_finish: err node ID [%u], ret [%d]\n", node_id, ret);
     }
@@ -223,7 +223,9 @@ int zrocks_init(const char *dev_name) {
     ztl_pro_register();
     ztl_mpe_register();
     ztl_map_register();
-    ztl_wca_register();
+    ztl_io_register();
+	ztl_thd_register();
+	ztl_mgmt_register();
 
     if (pthread_spin_init(&zrocks_mp_spin, 0)) {
         log_err("zrocks_init: pthread_spin_init failed\n");
