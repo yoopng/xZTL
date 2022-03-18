@@ -38,7 +38,7 @@ uint64_t zrocks_get_metadata_slba() {
     return XZTL_OK;
 }
 
-void get_metadata_slbas(uint64_t* slbas, uint32_t* num) {
+void zrocks_get_metadata_slbas(uint64_t* slbas, uint32_t* num) {
     int  zone_id;
     struct ztl_pro_zone *zone;
     for (zone_id = 0; zone_id < metadata.zone_num; zone_id++) {
@@ -49,6 +49,17 @@ void get_metadata_slbas(uint64_t* slbas, uint32_t* num) {
     num = metadata.zone_num;
 }
 
+void zrocks_set_metadata_slba(uint64_t slbas) {
+    int  zone_id;
+    struct ztl_pro_zone *zone;
+    for (zone_id = 0; zone_id < metadata.zone_num; zone_id++) {
+        zone = &metadata.metadata_zone[zone_id];
+        if (zone->zmd_entry->addr.addr == slbas) {
+            metadata.curr_zone_index = zone_id;
+        }
+    }
+}
+
 int get_metadata_zone_num() {
     return metadata.zone_num;
 }
@@ -57,14 +68,25 @@ struct ztl_metadata *get_ztl_metadata() {
     return &metadata;
 }
 
-static uint64_t get_metadata_slba(int start, int end) {
+static int get_curr_metadata_zone(int start, int end) {
     int                  zone_id;
     struct ztl_pro_zone *zone;
     for (zone_id = start; zone_id < end; zone_id++) {
         zone = &metadata.metadata_zone[zone_id];
         if (zone->zmd_entry->wptr <
             zone->zmd_entry->addr.addr + zone->capacity) {
-            return zone->zmd_entry->wptr;
+            return zone_id;
+        }
+    }
+    return 0;
+}
+
+static int  get_other_metadata_zone() {
+    int                  zone_id;
+    struct ztl_pro_zone *zone;
+    for (zone_id = 0; zone_id < metadata.zone_num; zone_id++) {
+        if (metadata.current_zone != zone_id) {
+            return zone_id;
         }
     }
     return 0;
@@ -122,15 +144,13 @@ int ztl_metadata_init(struct app_group *grp) {
         zone->lock      = 0;
         zmde->wptr = zmde->wptr_inflight = zinfo->wp;
     }
-    metadata.file_slba = get_metadata_slba(0, metadata.zone_num);
-    log_infoa("ztl_metadata_init: metadata.file_slba [%ull]\n", metadata.file_slba);
+    metadata.curr_zone_index = get_curr_metadata_zone(0, metadata.zone_num);
+    log_infoa("ztl_metadata_init: metadata.current_zone [%ull]\n", metadata.curr_zone_index);
 
     return XZTL_OK;
 }
 
 int zrocks_read_metadata(uint64_t slba, unsigned char *buf, uint32_t length) {
-    uint64_t max_left = (metadata.file_slba - slba) * _zndmedia->devgeo->nbytes;
-    length            = length > max_left ? max_left : length;
     struct xztl_mp_entry *mp_entry = NULL;
     uint16_t              nlb      = length / _zndmedia->devgeo->nbytes;
     int                   ret      = 0;
@@ -180,7 +200,7 @@ META_READ_FAIL:
     return XZTL_OK;
 }
 
-static inline int zrocks_reset_file_md(uint8_t reset_op) {
+/*static inline int zrocks_reset_file_md(uint8_t reset_op) {
     struct xnvme_cmd_ctx xnvme_ctx = xnvme_cmd_ctx_from_dev(_zndmedia->dev);
     int                  err       = 0;
     int                  zone_id;
@@ -200,6 +220,24 @@ static inline int zrocks_reset_file_md(uint8_t reset_op) {
     }
     return XZTL_ZTL_MD_RESET_ERR;
 }
+*/
+static inline int zrocks_reset_file_md(uint64_t addr) {
+    struct xnvme_cmd_ctx xnvme_ctx = xnvme_cmd_ctx_from_dev(_zndmedia->dev);
+    int                  err       = 0;
+    xnvme_ctx.async.queue  = NULL;
+    xnvme_ctx.async.cb_arg = NULL;
+    err  = xnvme_znd_mgmt_send(
+        &xnvme_ctx, xnvme_dev_get_nsid(_zndmedia->dev),
+        addr, false,
+        XNVME_SPEC_ZND_CMD_MGMT_SEND_RESET, 0, NULL);
+
+    if (err) {
+        log_erra("zrocks_reset_file_md: znd_cmd_mgmt_send. err [%d]\n", err);
+        break;
+    }
+    
+    return XZTL_ZTL_MD_RESET_ERR;
+}
 
 int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
     uint16_t          nlb;
@@ -214,11 +252,17 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
     const unsigned char *data = buf;
 
     pthread_mutex_lock(&metadata.page_spin);
-    if (metadata.file_slba * core->media->geo.nbytes + length >=
-        (metadata.metadata_zone[metadata.zone_num - 1].capacity) *
-            core->media->geo.nbytes) {
-        zrocks_reset_file_md(XNVME_SPEC_ZND_CMD_MGMT_SEND_RESET);
-        metadata.file_slba = 0;
+    struct ztl_pro_zone *zone = &metadata.metadata_zone[metadata.curr_zone_index];
+    if (zone->wp  + length /core->media->geo.nbytes >=
+       zone->zmd_entry->addr.addr + zone->capacity) {
+        //zrocks_reset_file_md(XNVME_SPEC_ZND_CMD_MGMT_SEND_RESET);
+        //metadata.file_slba = 0;
+        // ÇĞ»»Zone
+        metadata.curr_zone_index = get_other_metadata_zone();
+        zone = &metadata.metadata_zone[metadata.curr_zone_index];
+        zrocks_reset_file_md(zone->zmd_entry->addr.addr);
+        pthread_mutex_unlock(&metadata.page_spin);
+        return XZTL_ZTL_MD_WRITE_FULL;
     }
 
     while (remain_len > 0) {
@@ -228,7 +272,7 @@ int zrocks_write_file_metadata(const unsigned char *buf, uint32_t length) {
 
 META_WRITE_FAIL:
         err = xnvme_nvm_write(&xnvme_ctx, xnvme_dev_get_nsid(_zndmedia->dev),
-                              metadata.file_slba, nlb - 1, data, NULL);
+                              zone->wp, nlb - 1, data, NULL);
 
         if (err || xnvme_cmd_ctx_cpl_status(&xnvme_ctx)) {
             xnvmec_perr("xnvme_nvm_write()", err);
@@ -243,7 +287,7 @@ META_WRITE_FAIL:
             break;
         }
     
-        metadata.file_slba += nlb;
+        zone->wp += nlb;
         data += write_len;
         remain_len -= write_len;
     }
