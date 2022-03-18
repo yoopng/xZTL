@@ -12,35 +12,55 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 
-#define FILE_METADATA_BUF_SIZE (40 * 1024 * 1024)
+#define FILE_METADATA_BUF_SIZE (80 * 1024 * 1024)
 #define FLUSH_INTERVAL (60 * 60)
 #define SLEEP_TIME 5
+#define MAX_META_ZONE 2
+
+enum Operation {All, Update, Replace, Delete};
 
 namespace rocksdb {
 
 std::uint32_t ZNSFile::GetFileMetaLen() {
   uint32_t metaLen = sizeof(ZrocksFileMeta);
+  metaLen += pieceInfos.size() * sizeof(PieceInfo);
   return metaLen;
 }
 
-std::uint32_t ZNSFile::WriteMetaToBuf(unsigned char* buf) {
+std::uint32_t ZNSFile::WriteMetaToBuf(unsigned char* buf, bool update) {
   // reserved single file head
   std::uint32_t length = sizeof(ZrocksFileMeta);
 
   ZrocksFileMeta fileMetaData;
-  fileMetaData.magic = FILE_METADATA_MAGIC;
   fileMetaData.filesize = size;
   fileMetaData.level = level;
-  fileMetaData.znode_id = znode_id;
+  fileMetaData.pieceNum = pieceInfos.size();
+  std::uint32 i = 0;
+  if (update) {
+	i = startIndex;
+	fileMetaData.pieceNum = pieceInfos.size() - startIndex;
+  }
+  
   memcpy(fileMetaData.filename, name.c_str(), name.length());
   memcpy(buf, &fileMetaData, sizeof(ZrocksFileMeta));
+  for (; i < pieceInfos.size(); i++) {
+ 	memcpy(buf, &pieceInfos[i], sizeof(PieceInfo));
+	length += sizeof(PieceInfo);
+  }
 
+  if (update) {
+	startIndex = pieceInfos.size();
+  }
+ 
   return length;
 }
 
 void ZNSFile::PrintMetaData() {
-  std::cout << __func__ << " FileName: " << name << " znode_id: " << znode_id
-            << std::endl;
+  std::cout << __func__ << " FileName: " << name << std::endl;
+  for (uint32_t i =0; i < pieceInfos.size(); i++) {
+  	PieceInfo& pInfo = pieceInfos[i];
+  	std::cout << " nodeId: " << pInfo.node_id << " offset: " << pInfo.p.pos <<  " len: " << pInfo.p.len <<std::endl;
+  }
 }
 /* ### ZNS Environment method implementation ### */
 void ZNSEnv::NodeSta(std::int32_t znode_id, size_t n) {
@@ -237,15 +257,9 @@ Status ZNSEnv::FlushMetaData() {
     return Status::OK();
   }
 
-  unsigned char* buf =
-      reinterpret_cast<unsigned char*>(zrocks_alloc(FILE_METADATA_BUF_SIZE));
-  if (buf == NULL) {
-    return Status::MemoryLimit();
-  }
-
-  memset(buf, 0, FILE_METADATA_BUF_SIZE);
+  memset(metaBuf, 0, FILE_METADATA_BUF_SIZE);
   // reserved head position
-  int dataLen = sizeof(MetadataHead);
+  int dataLen = sizeof(MetadataHead) + sizeof(fileNum);
   if (ZNS_DEBUG_META)
     std::cout << __func__ << " Start FlushMetaData " << std::endl;
   int fileNum = 0;
@@ -260,11 +274,10 @@ Status ZNSEnv::FlushMetaData() {
     if (ZNS_DEBUG_META) zfile->PrintMetaData();
     if (dataLen + zfile->GetFileMetaLen() >= FILE_METADATA_BUF_SIZE) {
       std::cout << __func__ << ": buf over flow" << std::endl;
-      zrocks_free(buf);
       return Status::MemoryLimit();
     }
 
-    int length = zfile->WriteMetaToBuf(buf + dataLen);
+    int length = zfile->WriteMetaToBuf(metaBuf + dataLen);
     dataLen += length;
   }
 
@@ -274,20 +287,127 @@ Status ZNSEnv::FlushMetaData() {
   }
 
   MetadataHead metadataHead;
-  metadataHead.meta.dataLength = dataLen - sizeof(MetadataHead);
-  metadataHead.meta.magic = METADATA_MAGIC;
-  metadataHead.meta.fileNum = fileNum;
-  metadataHead.meta.time = time(NULL);
+  metadataHead.crc = 0;
+  metadataHead.tag = All;
+  metadataHead.dataLength = dataLen - sizeof(MetadataHead);
+  memcpy(metaBuf, &metadataHead, sizeof(MetadataHead));
+  memcpy(metaBuf+sizeof(MetadataHead), &fileNum, sizeof(fileNum));
+  int ret = zrocks_write_file_metadata(metaBuf, dataLen);
+  if (ret) {
+    std::cout << __func__ << ": zrocks_write_metadata error" << std::endl;
+  }
+ 
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " End FlushMetaData " << std::endl;
 
-  memcpy(buf, &metadataHead, sizeof(MetadataHead));
+  return Status::OK();
+}
+
+Status ZNSEnv::FlushUpdateMetaData(ZNSFile* zfile) {
+  if (!ZNS_META_SWITCH) {
+    return Status::OK();
+  }
+
+  memset(metaBuf, 0, FILE_METADATA_BUF_SIZE);
+  // reserved head position
+  int dataLen = sizeof(MetadataHead);
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " Start FlushUpdateMetaData " << std::endl;
+
+    int length = zfile->WriteMetaToBuf(metaBuf + dataLen);
+    dataLen += length;
+  
+  // sector align
+  if (dataLen % ZNS_ALIGMENT != 0) {
+    dataLen = (dataLen / ZNS_ALIGMENT + 1) * ZNS_ALIGMENT;
+  }
+
+  MetadataHead metadataHead;
+  metadataHead.crc = 0;
+  metadataHead.tag = Update;
+  metadataHead.dataLength = dataLen - sizeof(MetadataHead);
+  memcpy(metaBuf, &metadataHead, sizeof(MetadataHead));
   int ret = zrocks_write_file_metadata(buf, dataLen);
   if (ret) {
     std::cout << __func__ << ": zrocks_write_metadata error" << std::endl;
   }
+  
   if (ZNS_DEBUG_META)
-    std::cout << __func__ << " End FlushMetaData " << std::endl;
+    std::cout << __func__ << " End FlushUpdateMetaData " << std::endl;
 
-  zrocks_free(buf);
+  return Status::OK();
+}
+
+Status ZNSEnv::FlushDelMetaData(std::string& fileName) {
+  if (!ZNS_META_SWITCH) {
+    return Status::OK();
+  }
+
+  memset(metaBuf, 0, FILE_METADATA_BUF_SIZE);
+  // reserved head position
+  int dataLen = sizeof(MetadataHead);
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " Start FlushUpdateMetaData " << std::endl;
+
+  memcpy(metaBuf + dataLen, fileName.c_str(), fileName.length());
+  dataLen += FILE_NAME_LEN;
+	
+  // sector align
+  if (dataLen % ZNS_ALIGMENT != 0) {
+    dataLen = (dataLen / ZNS_ALIGMENT + 1) * ZNS_ALIGMENT;
+  }
+
+  MetadataHead metadataHead;
+  metadataHead.crc = 0;
+  metadataHead.tag = Delete;
+  metadataHead.dataLength = dataLen - sizeof(MetadataHead);
+  memcpy(metaBuf, &metadataHead, sizeof(MetadataHead));
+  int ret = zrocks_write_file_metadata(buf, dataLen);
+  if (ret) {
+    std::cout << __func__ << ": zrocks_write_metadata error" << std::endl;
+  }
+  
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " End FlushUpdateMetaData " << std::endl;
+
+  return Status::OK();
+}
+
+Status ZNSEnv::FlushReplaceMetaData(std::string& srcName, std::string& destName) {
+  if (!ZNS_META_SWITCH) {
+    return Status::OK();
+  }
+
+  memset(metaBuf, 0, FILE_METADATA_BUF_SIZE);
+  // reserved head position
+  int dataLen = sizeof(MetadataHead);
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " Start FlushReplaceMetaData " << std::endl;
+
+  memcpy(metaBuf + dataLen, srcName.c_str(), srcName.length());
+  dataLen += FILE_NAME_LEN;
+  
+  memcpy(metaBuf + dataLen, destName.c_str(), destName.length());
+  dataLen += FILE_NAME_LEN;
+  
+  // sector align
+  if (dataLen % ZNS_ALIGMENT != 0) {
+    dataLen = (dataLen / ZNS_ALIGMENT + 1) * ZNS_ALIGMENT;
+  }
+
+  MetadataHead metadataHead;
+  metadataHead.crc = 0;
+  metadataHead.tag = Replace;
+  metadataHead.dataLength = dataLen - sizeof(MetadataHead);
+  memcpy(metaBuf, &metadataHead, sizeof(MetadataHead));
+  int ret = zrocks_write_file_metadata(buf, dataLen);
+  if (ret) {
+    std::cout << __func__ << ": zrocks_write_metadata error" << std::endl;
+  }
+  
+  if (ZNS_DEBUG_META)
+    std::cout << __func__ << " End FlushUpdateMetaData " << std::endl;
+
   return Status::OK();
 }
 
@@ -307,9 +427,14 @@ void ZNSEnv::RecoverFileFromBuf(unsigned char* buf, std::uint32_t& praseLen) {
 
   znsFile->size = fileMetaData.filesize;
   znsFile->level = fileMetaData.level;
-  znsFile->znode_id = fileMetaData.znode_id;
-
+ 
   std::uint32_t len = sizeof(ZrocksFileMeta);
+  for (std::uint16_t i = 0; i < fileMetaData.pieceNum; i++) {
+	PieceInfo p = *(reinterpret_cast<PieceInfo*>(buf));
+	znsFile->pieceInfos.push_back(p);
+	len += sizeof(PieceInfo);
+  }
+  
   if (ZNS_DEBUG_META) {
     znsFile->PrintMetaData();
   }
@@ -322,78 +447,106 @@ void ZNSEnv::RecoverFileFromBuf(unsigned char* buf, std::uint32_t& praseLen) {
 }
 
 Status ZNSEnv::LoadMetaData() {
+  metaBuf = reinterpret_cast<unsigned char*>(zrocks_alloc(FILE_METADATA_BUF_SIZE));
+  if (metaBuf == NULL) {
+	return Status::MemoryLimit();
+  }
+
   std::cout << __func__ << " Start LoadMetaData " << std::endl;
-  std::uint64_t startLBA = zrocks_get_metadata_slba();
-  std::uint64_t lastLBA = startLBA;
-
-  MetadataHead metadataHead;
-  int ret = zrocks_read_metadata(startLBA, (unsigned char*)&metadataHead,
-                                 sizeof(metadataHead));
-  if (ret) {
-    std::cout << __func__ << ": first zrocks_read_metadata error" << std::endl;
-    return Status::IOError();
+  
+  std::uint8_t metaZoneNum = MAX_META_ZONE;
+  MetaZone metaZones[MAX_META_ZONE]={0};
+  int ret = zrocks_get_metadata_slbas(&metaZoneNum, metaZones);
+  
+  SuperBlock masterSB;
+  masterZone = metaZones[0];
+  ret = zrocks_read_metadata(metaZones[0].slba, (unsigned char*)&masterSB, sizeof(SuperBlock));
+  if (ret || masterSB.info.magic != METADATA_MAGIC) {
+	std::cout << "read superblock err" << std::endl;
   }
-
-  if (metadataHead.meta.magic != METADATA_MAGIC) {
-    std::cout << __func__ << ": no metadata" << std::endl;
-    return Status::OK();
+  
+  SuperBlock slaveSB;
+  slaveZone = metaZones[1];
+  ret = zrocks_read_metadata(metaZones[1].slba, (unsigned char*)&slaveSB, sizeof(SuperBlock));
+  if (ret || slaveSB.info.magic != METADATA_MAGIC) {
+	std::cout << "read superblock err" << std::endl;
   }
-
-  while (metadataHead.meta.magic == METADATA_MAGIC) {
-    lastLBA = startLBA;
-    startLBA +=
-        (sizeof(metadataHead) + metadataHead.meta.dataLength) / ZNS_ALIGMENT;
-
-    metadataHead.meta.magic = 0;
-    ret = zrocks_read_metadata(startLBA, (unsigned char*)&metadataHead,
-                               sizeof(metadataHead));
-    if (ret) {
-      std::cout << __func__ << ": zrocks_read_metadata error " << ret
-                << std::endl;
-      return Status::IOError();
-    }
+  
+  if (masterSB.info.sequence > slaveSB.info.sequence) {
+	seq = masterSB.info.sequence + 1;
+  } else {
+	seq = slaveSB.info.sequence + 1;
+	masterZone = metaZones[1];
+	slaveZone = metaZones[0];
   }
+  
+  std::uint64_t slbas[MAX_META_ZONE]; 
+  slbas[0] = masterZone.slba;
+  slbas[1] = slaveZone.slba;
 
-  // read right head
-  ret = zrocks_read_metadata(lastLBA, (unsigned char*)&metadataHead,
-                             sizeof(metadataHead));
-  if (ret) {
-    std::cout << __func__ << ": zrocks_read_metadata lastLBA error " << ret
-              << std::endl;
-    return Status::IOError();
-  }
+  for (std::uint8_t i = 0; i < MAX_META_ZONE; i++) {
+	  std::uint64_t readSlba = slbas[i] + (sizeof(SuperBlock) / ZNS_ALIGMENT);
+	  std::uint32_t praseLen = 0;
+	  while (true) {
+	  	  int readLen = ZNS_ALIGMENT;
+		  ret = zrocks_read_metadata(readSlba, metaBuf, readLen);
+		  if (ret) {
+			std::cout << __func__ << ":  zrocks_read_metadata head error" << std::endl;
+			break;
+		  }
 
-  if (metadataHead.meta.dataLength == 0) {
-    std::cout << __func__ << ": not found metadata" << std::endl;
-    return Status::OK();
-  }
+		  MetadataHead* metadataHead = (MetadataHead*)metaBuf;
+		  if (metadataHead->dataLength == 0) {
+			return;
+		  }
+		  
+		  if (metadataHead->dataLength > readLen) {
+			 ret = zrocks_read_metadata(readSlba, metaBuf + readLen, metadataHead->dataLength - readLen);
+			if (ret) {
+				std::cout << __func__ << ":  zrocks_read_metadata head error" << std::endl;
+				continue;
+		  	}
+		  }
+		  // Ð£ÑéCRC
+		 praseLen += sizeof(MetadataHead);
+		 readSlba += metadataHead->dataLength / ZNS_ALIGMENT;
+		 switch (metadataHead->tag) {
+		     case All:
+			 	std::uint16_t fileNum = *(std::uint16_t*)(metaBuf + praseLen);
+				praseLen += sizeof(fileNum);
+				for (std::uint16_t i = 0; i < fileNum; i++) {
+					std::uint32_t fileMetaLen = 0;
+					RecoverFileFromBuf(metaBuf+ praseLen, fileMetaLen);
+					praseLen += fileMetaLen;
+				}
+			 break;
+		     case Update:
+			 	std::uint32_t fileMetaLen = 0;
+			 	RecoverFileFromBuf(metaBuf+ praseLen, fileMetaLen);
+				praseLen += fileMetaLen;
+	                break;
+	            case Replace:
+				std::string srcFileName = metaBuf+ praseLen;
+				praseLen += FILE_NAME_LEN;
+				std::string dstFileName = metaBuf+ praseLen;
+				praseLen += FILE_NAME_LEN;
+				ZNSFile* znsFile = files[srcFileName];
+				files.erase(srcFileName);
+				files[dstFileName] =znsFile;
+	                break;
+		     case Delete:
+			 	std::string fileName = metaBuf+ praseLen;
+				praseLen += FILE_NAME_LEN;
+				files.erase(fileName);
+	                break;
+	            default:
+	                break;
+	         }
+	  }
 
-  unsigned char* buf = NULL;
-  buf = new unsigned char[FILE_METADATA_BUF_SIZE];
-  if (buf == NULL) {
-    return Status::MemoryLimit();
-  }
-
-  memset(buf, 0, FILE_METADATA_BUF_SIZE);
-
-  // read data
-  ret = zrocks_read_metadata(lastLBA + sizeof(metadataHead) / ZNS_ALIGMENT, buf,
-                             metadataHead.meta.dataLength);
-  if (ret) {
-    delete[] buf;
-    return Status::IOError();
-  }
-
-  std::uint32_t len = 0;
-  for (std::uint32_t i = 0; i < metadataHead.meta.fileNum; i++) {
-    std::uint32_t tmpLen = 0;
-    RecoverFileFromBuf(buf + len, tmpLen);
-    len += tmpLen;
   }
 
   std::cout << __func__ << " End LoadMetaData " << std::endl;
-
-  delete[] buf;
   return Status::OK();
 }
 

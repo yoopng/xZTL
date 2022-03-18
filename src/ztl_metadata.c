@@ -38,6 +38,17 @@ uint64_t zrocks_get_metadata_slba() {
     return XZTL_OK;
 }
 
+void get_metadata_slbas(uint64_t* slbas, uint32_t* num) {
+    int  zone_id;
+    struct ztl_pro_zone *zone;
+    for (zone_id = 0; zone_id < metadata.zone_num; zone_id++) {
+        zone = &metadata.metadata_zone[zone_id];
+        slbas[zone_id] = zone->zmd_entry->addr.addr;
+    }
+
+    num = metadata.zone_num;
+}
+
 int get_metadata_zone_num() {
     return metadata.zone_num;
 }

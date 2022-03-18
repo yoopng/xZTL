@@ -50,38 +50,42 @@
 namespace rocksdb {
 
 /* ### ZNS Environment ### */
+struct SuperBlock {
+  union {    
+	struct { 
+		std::uint8_t magic;
+		std::uint32_t sequence;
+		} info;
+        char addr[ZNS_ALIGMENT];
+  };
+	SuperBlock() {
+	    info.magic = METADATA_MAGIC;
+	    info.sequence = 0;
+  	}
+};
 
 struct MetadataHead {
-  union {
-    struct {
-      std::uint8_t magic;
-      std::uint32_t fileNum;
-      std::uint64_t time;
-      std::uint64_t dataLength;
-    } meta;
-    char addr[ZNS_ALIGMENT];
-  };
+      std::uint32_t crc;
+      std::uint32_t dataLength;
+      std::uint8_t tag;
 
   MetadataHead() {
-    meta.magic = 0;
-    meta.fileNum = 0;
-    meta.time = 0;
-    meta.dataLength = 0;
+    crc = 0;
+    dataLength = 0;
+    tag = 0;
   }
 };
 
 struct ZrocksFileMeta {
-  std::uint8_t magic;
   int8_t level;
   std::uint32_t filesize;
+  std::int32_t pieceNum;
   char filename[FILE_NAME_LEN];
-  std::int32_t znode_id;
 
   ZrocksFileMeta() {
-    magic = 0;
-    filesize = 0;
     level = -1;
-    znode_id = -1;
+    filesize = 0;
+    pieceNum = 0;
     memset(filename, 0, sizeof(filename));
   }
 };
@@ -91,14 +95,31 @@ struct ZrocksMediaRes {
   int cnt;
 };
 
+struct PieceInfo {
+  std::int16_t node_id;
+  union {
+    struct {
+      uint32_t  pos : 17;
+      uint32_t  len : 15;
+    } p;
+    uint32_t piece;
+  }
+};
+
+struct MetaZone {
+  uint64_t  slba;
+  uint64_t  wp;
+};
+
 class ZNSFile {
  public:
   const std::string name;
   size_t size;
   std::uint64_t uuididx;
   int level;
-  std::int32_t znode_id;
-
+  std::vector<PieceInfo> pieceInfos;
+  std::uint32_t startIndex;
+  	
   ZNSFile(const std::string& fname, int lvl)
       : name(fname), uuididx(0), level(lvl) {
     size = 0;
@@ -109,7 +130,7 @@ class ZNSFile {
 
   std::uint32_t GetFileMetaLen();
 
-  std::uint32_t WriteMetaToBuf(unsigned char* buf);
+  std::uint32_t WriteMetaToBuf(unsigned char* buf, bool update = false);
 
   void PrintMetaData();
 };
@@ -132,7 +153,12 @@ class ZNSEnv : public Env {
   struct timespec ts_e;
   uint64_t start_ns;
   uint64_t end_ns;
-
+  
+  unsigned char* metaBuf;
+  MetaZone masterZone;
+  MetaZone slaveZone;
+  uint64_t seq;
+  
   explicit ZNSEnv(const std::string& dname) : dev_name(dname) {
     posixEnv = Env::Default();
     writable_file_leveled = true;
@@ -165,6 +191,12 @@ class ZNSEnv : public Env {
   }
 
   Status FlushMetaData();
+
+  Status FlushUpdateMetaData(ZNSFile* zfile) ;
+
+  Status FlushDelMetaData(std::string& fileName);
+
+  Status FlushReplaceMetaData(std::string& srcName, std::string& destName);
 
   void RecoverFileFromBuf(unsigned char* buf, std::uint32_t& praseLen);
 
