@@ -109,7 +109,11 @@ struct xztl_io_mcmd {
     struct xztl_mthread_ctx *async_ctx;
     struct xztl_mp_entry *   mp_cmd;
     struct xztl_mp_entry *   mp_entry;
-
+	
+    struct iovec *dvec;
+    uint64_t dvec_cnt;
+    uint64_t dvec_nbytes;
+	
     /* For latency */
     uint64_t us_start;
     uint64_t us_end;

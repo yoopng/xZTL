@@ -83,8 +83,6 @@ static void ztl_io_write_callback_mcmd(void *arg) {
     mcmd = (struct xztl_io_mcmd *)arg;
     ucmd = (struct xztl_io_ucmd *)mcmd->opaque;
 
-    ucmd->minflight[mcmd->sequence_zn] = 0;
-
     if (mcmd->status) {
         xztl_stats_inc(XZTL_STATS_WRITE_CALLBACK_FAIL, 1);
         log_erra("ztl_io_write_callback_mcmd: Callback. ID [%lu], S [%d/%d], C [%d], WOFF [0x%lx]. St [%d]\n",
@@ -383,7 +381,7 @@ int ztl_io_write_ucmd(struct xztl_io_ucmd *ucmd) {
     }
 
     ucmd->prov      = prov;
-    ucmd->nmcmd     = ncmd;
+    ucmd->nmcmd     = prov->naddr;
     ucmd->completed = 0;
     ucmd->ncb       = 0;
 
@@ -393,101 +391,40 @@ int ztl_io_write_ucmd(struct xztl_io_ucmd *ucmd) {
 
     /* Populate media commands */
     cmd_i = 0;
-    int zone_sector_num[ZTL_PRO_STRIPE * 2] = {0};
-
+	
+    struct iovec dvecs[ZTL_PRO_STRIPE * 2][32];
     for (int i = 0; i < prov->naddr; i++) {
-        zone_sector_num[i] = prov->nsec[i];
+	 uint64_t dvec_cnt = prov->nsec[i] / ZTL_WCA_SEC_MCMD;
+	 uint64_t dvec_nbytes= prov->nsec[i]  *  ZNS_ALIGMENT;
+	 uint64_t tbuf = boff + i * ZTL_WCA_SEC_MCMD * ZNS_ALIGMENT;
+	 for (uint64_t j = 0; j < dvec_cnt; j++) {
+		struct iovec* piovec = &dvecs[i][j];
+		piovec->iov_base = tbuf;
+		piovec->iov_len = ZTL_WCA_SEC_MCMD * ZNS_ALIGMENT;
+		tbuf += ZTL_PRO_STRIPE * ZTL_PRO_STRIPE * ZNS_ALIGMENT;
+	 }
+
+	prov->addr[i].g.sect += prov->nsec[i];
+	mcmd = tdinfo->mcmd[cmd_i++];
+	mcmd->opcode = XZTL_CMD_WRITE;
+	mcmd->synch       = 0;
+	mcmd->status      = 0;	
+	mcmd->callback  = ztl_io_write_callback_mcmd;
+	mcmd->opaque    = ucmd;
+	mcmd->async_ctx = tctx;
+	mcmd->dvec = &dvecs[i];
+	mcmd->dvec_cnt = dvec_cnt;
+	mcmd->dvec_nbytes = dvec_nbytes;
+	ret = xztl_media_submit_io(mcmd);
+	if (ret) {
+		printf("xztl_media_submit_io failed")
+		xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
+		ztl_io_write_poke_ctx(tctx);
+	}
     }
 
-    while (cmd_i < ncmd) {
-        for (zn_i = 0; zn_i < prov->naddr; zn_i++) {
-            nsec_zn = zone_sector_num[zn_i];
-            if (nsec_zn <= 0) {
-                continue;
-            }
-
-            mcmd = tdinfo->mcmd[cmd_i];
-            mcmd->opcode =
-                (XZTL_WRITE_APPEND) ? XZTL_ZONE_APPEND : XZTL_CMD_WRITE;
-            mcmd->synch       = 0;
-            mcmd->submitted   = 0;
-            mcmd->sequence    = cmd_i;
-            mcmd->sequence_zn = zn_i;
-            mcmd->naddr       = 1;
-            mcmd->status      = 0;
-            mcmd->callback_err_cnt = 0;
-            mcmd->nsec[0] =
-                (nsec_zn >= ZTL_WCA_SEC_MCMD) ? ZTL_WCA_SEC_MCMD : nsec_zn;
-
-            mcmd->addr[0].g.grp  = prov->addr[zn_i].g.grp;
-            mcmd->addr[0].g.zone = prov->addr[zn_i].g.zone;
-
-            if (!XZTL_WRITE_APPEND) {
-                mcmd->addr[0].g.sect = (uint64_t)prov->addr[zn_i].g.sect;
-            }
-
-            zone_sector_num[zn_i] -= mcmd->nsec[0];
-            prov->addr[zn_i].g.sect += mcmd->nsec[0];
-
-            ucmd->msec[cmd_i] = mcmd->nsec[0];
-            mcmd->prp[0]      = boff;
-            boff += core->media->geo.nbytes * mcmd->nsec[0];
-
-            mcmd->callback  = ztl_io_write_callback_mcmd;
-            mcmd->opaque    = ucmd;
-            mcmd->async_ctx = tctx;
-
-            ucmd->mcmd[cmd_i]            = mcmd;
-            ucmd->mcmd[cmd_i]->submitted = 0;
-            zn_cmd_id[zn_i][zn_cmd_id_num[zn_i]++] = cmd_i;
-            cmd_i++;
-        }
-    }
 
     ZDEBUG(ZDEBUG_WCA, "ztl_wca_write_ucmd: Populated: %d", cmd_i);
-
-    /* Submit media commands */
-    for (cmd_i = 0; cmd_i < ZTL_PRO_STRIPE * 2; cmd_i++)
-        ucmd->minflight[cmd_i] = 0;
-
-
-    submitted = 0;
-    int zn_cmd_id_index[ZTL_PRO_STRIPE * 2] = {0};
-    while (submitted < ncmd) {
-        for (zn_i = 0; zn_i < prov->naddr; zn_i++) {
-            int index = zn_cmd_id_index[zn_i];
-            int num   = zn_cmd_id_num[zn_i];
-            if (index >= num) {
-                continue;
-            }
-
-            /* Limit to 1 write per zone if append is not supported */
-            if (!XZTL_WRITE_APPEND) {
-                if (ucmd->minflight[zn_i]) {
-                    ztl_io_write_poke_ctx(tctx);
-                    continue;
-                }
-
-                ucmd->minflight[zn_i] = 1;
-            }
-
-            ret = xztl_media_submit_io(ucmd->mcmd[zn_cmd_id[zn_i][index]]);
-            if (ret) {
-                xztl_stats_inc(XZTL_STATS_WRITE_SUBMIT_FAIL, 1);
-                ztl_io_write_poke_ctx(tctx);
-                zn_i--;
-                continue;
-            }
-
-            ucmd->mcmd[zn_cmd_id[zn_i][index]]->submitted = 1;
-            submitted++;
-            zn_cmd_id_index[zn_i]++;
-
-            if (submitted % ZTL_PRO_STRIPE == 0)
-                ztl_io_write_poke_ctx(tctx);
-        }
-        usleep(1);
-    }
 
     /* Poke the context for completions */
     while (ucmd->ncb < ucmd->nmcmd) {

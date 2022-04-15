@@ -152,11 +152,20 @@ static int znd_media_submit_write_asynch(struct xztl_io_mcmd *cmd) {
     xnvme_ctx->async.cb_arg = (void *)cmd; // NOLINT
     xnvme_ctx->dev          = zndmedia.dev;
     cmd->media_ctx          = xnvme_ctx;
+	
+    struct iovec *dvec;
+    uint64_t dvec_cnt;
+    uint64_t dvec_nbytes;
 
-    ret = xnvme_nvm_write(xnvme_ctx, xnvme_dev_get_nsid(zndmedia.dev), slba,
+   if (!dvec) {
+	ret = xnvme_nvm_write(xnvme_ctx, xnvme_dev_get_nsid(zndmedia.dev), slba,
                           (uint16_t)cmd->nsec[sec_i] - 1, dbuf, NULL);
-
-    if (ret) {
+   } else {
+	ret = xnvme_nvm_writev(xnvme_ctx, xnvme_dev_get_nsid(zndmedia.dev), slba,
+                          cmd->dvec, cmd->dvec_cnt, cmd->dvec_nbytes);
+   }
+    
+   if (ret) {
         log_erra("znd_media_submit_write_asynch: xnvme_nvm_write err ret [%d]  opaque [%p]\n", ret, cmd->opaque);
         xnvme_queue_put_cmd_ctx(tctx->queue, xnvme_ctx);
         xztl_print_mcmd(cmd);
